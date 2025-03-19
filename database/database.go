@@ -21,12 +21,12 @@ var Database *sql.DB
 func GetMod(modid string) (structs.Mod, error) {
 	modResult := structs.Mod{}
 
-	row := Database.QueryRow("SELECT id, name, description, game, platform, youtube, version, author, published, downloads, likes, repositoryurl FROM mods WHERE id=$1", modid)
+	row := Database.QueryRow("SELECT id, name, description, game, platform, youtube, version, author, published, downloads, likes FROM mods WHERE id=$1", modid)
 
 	err := row.Scan(&modResult.ID, &modResult.Name, &modResult.Description,
 		&modResult.Game, &modResult.Platform, &modResult.Video,
 		&modResult.Version, &modResult.Author, &modResult.Published,
-		&modResult.Downloads, &modResult.CachedLikes, &modResult.RepositoryUrl)
+		&modResult.Downloads, &modResult.CachedLikes)
 
 	return modResult, err
 }
@@ -290,7 +290,7 @@ func CreateMod(mod structs.Mod) error {
 		publish = 0
 	}
 
-	_, err := Database.Exec("INSERT INTO mods (id, name, description, game, platform, youtube, version, author, published, downloads, like, repositoryurl) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)", mod.ID, mod.Name, mod.Description, mod.Game, mod.Platform, mod.Video, 0, mod.Author, publish, 0, 1, mod.RepositoryUrl)
+	_, err := Database.Exec("INSERT INTO mods (id, name, description, game, platform, youtube, version, author, published, downloads, likes) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)", mod.ID, mod.Name, mod.Description, mod.Game, mod.Platform, mod.Video, 0, mod.Author, publish, 0, 1)
 	if err != nil {
 		println(err.Error())
 		return errors.New("failed to create database entry")
@@ -326,7 +326,7 @@ func GetCommentCount(pageID string) (int, error) {
 //
 
 func HasRateLimit(ip string, typeLimit string, pageid string) bool {
-	row := Database.QueryRow("SELECT COUNT(*) FROM ratelimits WHERE ip=$1, type=$2 pageid=$3", ip, typeLimit, pageid)
+	row := Database.QueryRow("SELECT COUNT(*) FROM ratelimits WHERE (ip=$1 AND type=$2 AND pageid=$3)", ip, typeLimit, pageid)
 	var count int
 	err := row.Scan(&count)
 	if err != nil {

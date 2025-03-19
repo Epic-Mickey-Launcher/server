@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"emlserver/database"
 	"emlserver/message"
-	"emlserver/mod"
 	"emlserver/security"
 	"emlserver/structs"
 	"fmt"
@@ -21,8 +20,7 @@ const (
 	APPROVED_STRING = "approved"
 	DENIED_STRING   = "denied"
 
-	REPORT              = "report"
-	MOD_CHANGE_REPO_URL = "mod_change_repo_url"
+	REPORT = "report"
 )
 
 func GetStringFromResult(result int) string {
@@ -80,13 +78,6 @@ func OnTicketReview(id string) error {
 	}
 
 	switch ticket.Action {
-	case MOD_CHANGE_REPO_URL:
-		message.SendMessage("0", ticket.Author, fmt.Sprintf("Your request to change (mod)[%s]'s Repository URL was %s.", ticket.TargetID, GetStringFromResult(ticket.Result)))
-		if ticket.Result != APPROVED {
-			break
-		}
-		go mod.HandleModRepository(ticket.Meta, mod.DOWNLOAD_AND_PACKAGE, ticket.TargetID, ticket.Author)
-		break
 
 	case REPORT:
 		var response string

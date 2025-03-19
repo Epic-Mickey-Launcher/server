@@ -26,14 +26,20 @@ func BeginClient() error {
 	guildID = config.LoadedConfig["DISCORD_GUILDID"]
 
 	ticket.DiscordReportTicket = func(ticket structs.Ticket) {
-		ReportTicket(ticket)
+		err := ReportTicket(ticket)
+		if err != nil {
+			return
+		}
 	}
 
 	client, err := discordgo.New("Bot " + config.LoadedConfig["DISCORD_TOKEN"])
 	if err != nil {
 		return err
 	}
-	client.Open()
+	err = client.Open()
+	if err != nil {
+		return err
+	}
 	for _, v := range commands {
 		_, err := client.ApplicationCommandCreate(client.State.User.ID, guildID, v)
 		if err != nil {
@@ -97,7 +103,7 @@ func ReportTicket(ticket structs.Ticket) error {
 		println("failed to send embed on ticket")
 		return err
 	}
-	_, err = Client.ChannelMessageSend(channelID, "<@fuckyou&"+roleID+">")
+	_, err = Client.ChannelMessageSend(channelID, "<@&"+roleID+">")
 	if err != nil {
 		println("failed to send ping on ticket")
 		return err
@@ -119,6 +125,18 @@ var (
 	defaultMemberPermissions int64 = discordgo.PermissionAll
 
 	commands = []*discordgo.ApplicationCommand{
+		{
+			Name:        "ban",
+			Description: "Ban a user by their ID",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "id",
+					Description: "ID of the user you want to ban.",
+					Required:    true,
+				},
+			},
+		},
 		{
 			Name:        "get",
 			Description: "Gets data by its ID",
@@ -170,6 +188,10 @@ var (
 	}
 
 	commandHandlers = map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate){
+		"ban": func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+			// options := i.ApplicationCommandData().Options
+			// id := options[0].Value.(string)
+		},
 		"get": func(s *discordgo.Session, i *discordgo.InteractionCreate) {
 			options := i.ApplicationCommandData().Options
 			id := options[0].Value.(string)
@@ -229,11 +251,6 @@ var (
 						{
 							Name:   "YouTube Video",
 							Value:  mod.Video,
-							Inline: true,
-						},
-						{
-							Name:   "Git Repository URL",
-							Value:  mod.RepositoryUrl,
 							Inline: true,
 						},
 						{

@@ -10,6 +10,11 @@ type User struct {
 	EmailHash string
 }
 
+type ToolTargetDownload struct {
+	Platform string
+	Name     string
+}
+
 type OTP struct {
 	UserID            string
 	PasswordGenerated string
@@ -18,19 +23,25 @@ type OTP struct {
 }
 
 type Mod struct {
-	ID            string
-	Author        string
-	Version       int
-	Video         string
-	Game          string
-	Platform      string
-	Downloads     int
-	Published     bool
-	Name          string
-	Description   string
-	RepositoryUrl string
-	Dependencies  []string
-	CachedLikes   int
+	ID           string
+	Author       string
+	Version      int
+	Video        string
+	Game         string
+	Platform     string
+	Downloads    int
+	Published    bool
+	Name         string
+	Description  string
+	Dependencies []string
+	CachedLikes  int
+}
+
+type TunnelInitData struct {
+	TunnelID  string
+	FileSize  int
+	Chunks    int
+	ChunkSize int
 }
 
 type Comment struct {
@@ -132,11 +143,10 @@ type RequestModQuery struct {
 }
 
 type RequestModUpload struct {
-	GitRepositoryUrl string
-	Name             string
-	Token            string
-	ID               string
-	Publish          bool
+	Name    string
+	Token   string
+	ID      string
+	Publish bool
 }
 
 type RequestMod struct {

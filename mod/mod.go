@@ -6,15 +6,18 @@ import (
 	"emlserver/config"
 	"emlserver/database"
 	"emlserver/ffmpeg"
-	"emlserver/git"
 	"emlserver/helper"
+	"emlserver/message"
 	"emlserver/security"
 	"emlserver/structs"
+	"emlserver/tunnels"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 const (
@@ -24,72 +27,95 @@ const (
 )
 
 const (
-	DOWNLOAD_AND_PACKAGE = 0
-	PACKAGE              = 1
-	DOWNLOAD             = 2
-	UPDATE               = 3
-	UPDATE_AND_PACKAGE   = 4
-	DOWNLOAD_AND_CREATE  = 5
+	UpdateAndPackage  = 4
+	DownloadAndCreate = 5
 )
 
-func HandleModRepository(url string, mode int, mod string, author string) (string, error) {
-	if mode == DOWNLOAD_AND_CREATE {
+func HandleModRepository(tunnelid string, mode int, mod string, author string) {
+	if mode == DownloadAndCreate {
 		mod = security.GenerateID()
 	}
 
-	modObj, err := database.GetMod(mod)
-	if err != nil && mode != DOWNLOAD_AND_CREATE {
-		return "", err
-	}
-	path := "modrepos/" + mod
-	_, exists := os.ReadDir(path)
-	if mode == DOWNLOAD || mode == DOWNLOAD_AND_PACKAGE || mode == DOWNLOAD_AND_CREATE {
-		println("downloading mod repo")
-		if exists == nil {
-			if url == modObj.RepositoryUrl {
-				return "", errors.New("repository does not need to be downloaded again.")
+	var filereceived = false
+	var archivepath string
+
+	for !filereceived {
+
+		println("Checking if", tunnelid, "has finished so", mod, "can proceed.")
+
+		complete, err := tunnels.CheckTunnel(tunnelid)
+
+		if err != nil {
+			println("mod upload tunnel error")
+			return
+		}
+
+		filereceived = complete
+
+		if filereceived {
+			archivepath, err = tunnels.GetTunnelFile(tunnelid)
+			if err != nil {
+				println("mod upload tunnel file does not exist error")
+				return
 			}
-			os.RemoveAll(path)
-		} else if !errors.Is(exists, os.ErrNotExist) {
-			return "", exists
 		}
 
-		err = os.MkdirAll(path, 0700)
-		if err != nil {
-			return "", errors.New("io error (jumbo)")
-		}
-		println(url)
-		err = git.Clone(url, path)
-		if err != nil {
-			return "", err
-		}
+		time.Sleep(time.Second * 3)
+	}
 
-		err = UpdateGitURl(mod, url)
+	println("Tunnel has finished.", mod, "will be processed.")
+	err := helper.CreateTemp()
+	if err != nil {
+		println(err.Error())
+		return
+	}
+
+	path := "publishtmp/" + mod
+
+	err = os.MkdirAll(path, os.ModePerm)
+	if err != nil {
+		println(err.Error())
+		return
+	}
+
+	err = archive.Extract(archivepath, path)
+	if err != nil {
+		println("extraction failed:", err.Error())
+		err := message.SendMessage("0", author, fmt.Sprintf("Your mod archive file could not be extracted by the server!: %s", err.Error()))
 		if err != nil {
 			println(err.Error())
-			return "", errors.New("failed to update git url of mod")
+			return
 		}
+		return
 	}
-	if mode == UPDATE || mode == UPDATE_AND_PACKAGE {
-		err = git.Update(path)
-		if err != nil {
-			return "", errors.New("git error")
-		}
+
+	err = tunnels.RemoveTunnel(tunnelid)
+	if err != nil {
+		println("mod upload could not delete tunnel error")
+		return
 	}
 
 	metadata, err := RunValidator(path)
+
 	if err != nil {
-		return "", err
+		print("validator failed!:", err.Error())
+		err := message.SendMessage("0", author, fmt.Sprintf("Your mod upload didn't pass validation!: %s", err.Error()))
+		if err != nil {
+			println(err.Error())
+			return
+		}
+		return
 	}
 
-	if mode == DOWNLOAD_AND_CREATE {
-		_, err = AddMod(metadata, true, mod, url, author)
+	if mode == DownloadAndCreate {
+		_, err = AddMod(metadata, true, mod, author)
 		if err != nil {
-			return "", err
+			println(err.Error())
+			return
 		}
 	}
 
-	if mode == PACKAGE || mode == UPDATE_AND_PACKAGE || mode == DOWNLOAD_AND_PACKAGE || mode == DOWNLOAD_AND_CREATE {
+	if mode == UpdateAndPackage || mode == DownloadAndCreate {
 		println("packaging mod")
 		packagePath := "static/mods/" + mod + ".tar.gz"
 
@@ -103,33 +129,42 @@ func HandleModRepository(url string, mode int, mod string, author string) (strin
 		err = archive.Package(path, packagePath, ignoreFilesBuffer)
 		ffmpeg.ResizeImage(path+"/"+metadata.IconPath, 512, 512, "static/modimg/"+mod+".webp")
 		if err != nil {
-			println(err.Error())
-			return "", errors.New("packaging error")
+			println(errors.New("packaging error"))
+			return
 		}
 
-		if mode == UPDATE_AND_PACKAGE {
-
-			err := UpdateModMeta(metadata, mod)
-			if err != nil {
-				println(err.Error())
-				return "", errors.New("mod meta update error")
-			}
-		}
 	}
 
 	err = UpdateModMeta(metadata, mod)
 	if err != nil {
-		println(err.Error())
-		return "", errors.New("failed to update mod meta")
+		println(errors.New("failed to update mod meta"))
+		return
 	}
 	println("finished handling mod repo")
-	return mod, nil
+
+	if mode == UpdateAndPackage {
+		err := message.SendMessage("0", author, fmt.Sprintf("(mod)[%s] has finished updating!", mod))
+		if err != nil {
+			return
+		}
+	}
+	if mode == DownloadAndCreate {
+		err := message.SendMessage("0", author, fmt.Sprintf("(mod)[%s] has been uploaded successfully!", mod))
+		if err != nil {
+			return
+		}
+	}
+
+	return
 }
 
 func RunValidator(path string) (structs.ModMetadata, error) {
-	helper.CreateTemp()
+	err := helper.CreateTemp()
+	if err != nil {
+		return structs.ModMetadata{}, err
+	}
 	defer helper.RemoveTemp()
-	err := exec.Command(config.LoadedConfig["VALIDATOR_EXECUTABLE"], path, "result.json").Run()
+	err = exec.Command(config.LoadedConfig["VALIDATOR_EXECUTABLE"], path, "result.json").Run()
 	if err != nil {
 		return structs.ModMetadata{}, errors.New("Validator " + err.Error())
 	}
@@ -143,11 +178,6 @@ func RunValidator(path string) (structs.ModMetadata, error) {
 		return structs.ModMetadata{}, errors.New("failed to read result json")
 	}
 	return data, nil
-}
-
-func UpdateGitURl(id string, url string) error {
-	_, err := database.Database.Exec("UPDATE mods SET repositoryurl=$1 WHERE id=$2", url, id)
-	return err
 }
 
 func parseIgnore(buffer string) []string {
@@ -206,23 +236,22 @@ func UpdateModMeta(modMetadata structs.ModMetadata, ID string) error {
 		return err
 	}
 
-	_, err = database.Database.Exec("UPDATE mods SET name=$1, description=$2, game=$3, platform=$4, youtube=$5, version=$6 WHERE id=$7", modMetadata.Name, modMetadata.Description, modMetadata.Game, modMetadata.Platform, modMetadata.Video, version+1, ID)
+	_, err = database.Database.Exec("UPDATE mods SET name=$1, description=$2, game=$3, platform=$4, youtube=$5, version=$6 WHERE id=$7", modMetadata.Name, modMetadata.Description, modMetadata.Game, strings.ToLower(modMetadata.Platform), modMetadata.Video, version+1, ID)
 	return err
 }
 
-func AddMod(modMetadata structs.ModMetadata, publish bool, id string, repoUrl string, author string) (string, error) {
+func AddMod(modMetadata structs.ModMetadata, publish bool, id string, author string) (string, error) {
 	mod := structs.Mod{
-		ID:            id,
-		Author:        author,
-		Name:          modMetadata.Name,
-		Description:   modMetadata.Description,
-		Platform:      modMetadata.Platform,
-		Game:          modMetadata.Game,
-		Video:         modMetadata.Video,
-		Published:     publish,
-		Version:       1,
-		Downloads:     0,
-		RepositoryUrl: repoUrl,
+		ID:          id,
+		Author:      author,
+		Name:        modMetadata.Name,
+		Description: modMetadata.Description,
+		Platform:    strings.ToLower(modMetadata.Platform),
+		Game:        modMetadata.Game,
+		Video:       modMetadata.Video,
+		Published:   publish,
+		Version:     1,
+		Downloads:   0,
 	}
 
 	err := database.CreateMod(mod)

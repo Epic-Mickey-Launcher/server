@@ -2,9 +2,9 @@ package webserver
 
 import (
 	"emlserver/comment"
+	"emlserver/config"
 	"emlserver/database"
 	"emlserver/ffmpeg"
-	"emlserver/git"
 	"emlserver/helper"
 	"emlserver/mail"
 	"emlserver/message"
@@ -12,6 +12,7 @@ import (
 	"emlserver/security"
 	"emlserver/structs"
 	"emlserver/ticket"
+	"emlserver/tunnels"
 	"emlserver/user"
 	"encoding/base64"
 	"encoding/json"
@@ -198,6 +199,11 @@ func getModIcon(w http.ResponseWriter, r *http.Request) {
 }
 
 func registerUser(w http.ResponseWriter, r *http.Request) {
+	if config.LoadedConfig["ALLOW_REGISTRATION"] != "off" {
+		http.Error(w, "sorry, we are not allowing registrations at the moment.", http.StatusForbidden)
+		return
+	}
+
 	var data structs.RequestRegisterAccount
 	err := json.NewDecoder(r.Body).Decode(&data)
 	if err != nil {
@@ -275,7 +281,10 @@ func getUserEmail(w http.ResponseWriter, r *http.Request) {
 
 	decryptedEmail := security.Decrypt(userObj.Email)
 
-	w.Write([]byte(decryptedEmail))
+	_, err = w.Write([]byte(decryptedEmail))
+	if err != nil {
+		return
+	}
 }
 
 func getUsername(w http.ResponseWriter, r *http.Request) {
@@ -345,7 +354,10 @@ func setPassword(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	database.SetPassword(userID, data.Password)
+	err = database.SetPassword(userID, data.Password)
+	if err != nil {
+		return
+	}
 }
 
 func setBio(w http.ResponseWriter, r *http.Request) {
@@ -463,9 +475,6 @@ func publishMod(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, errors.New("no token provided").Error(), http.StatusForbidden)
 		return
 	}
-	if strings.TrimSpace(data.GitRepositoryUrl) == "" {
-		http.Error(w, "no git url provided", http.StatusForbidden)
-	}
 
 	userid, err := user.GetUserWithToken(data.Token)
 	if err != nil {
@@ -473,12 +482,32 @@ func publishMod(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	modID, err := mod.HandleModRepository(data.GitRepositoryUrl, mod.DOWNLOAD_AND_CREATE, "", userid)
+	tunnel, err := tunnels.CreateTunnel()
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusForbidden)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
-	_, err = w.Write([]byte(modID))
+	mode := mod.DownloadAndCreate
+
+	if data.ID != "" {
+		modObj, err := database.GetMod(data.ID)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+
+		if modObj.Author != userid {
+			http.Error(w, "you don't own this mod", http.StatusNotFound)
+			return
+		}
+
+		mode = mod.UpdateAndPackage
+	}
+
+	go mod.HandleModRepository(tunnel, mode, data.ID, userid)
+	println("tunnel created for mod upload:", tunnel)
+	_, err = w.Write([]byte(tunnel))
 	if err != nil {
 		println("Error writing response for publishing mod")
 		http.Error(w, "server error", http.StatusForbidden)
@@ -668,22 +697,6 @@ func expiredOTPRoutine() {
 	}
 }
 
-func gitGetBranches(w http.ResponseWriter, r *http.Request) {
-	var data structs.RequestGit
-	err := json.NewDecoder(r.Body).Decode(&data)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	branches, err := git.GetRemoteBranches(data.GitUrl)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	w.Write([]byte(strings.Join(branches, " ")))
-}
-
 func deleteMod(w http.ResponseWriter, r *http.Request) {
 	var data structs.RequestModUpload
 	err := json.NewDecoder(r.Body).Decode(&data)
@@ -711,40 +724,6 @@ func deleteMod(w http.ResponseWriter, r *http.Request) {
 	mod.DeleteMod(modObj.ID)
 }
 
-func updateMod(w http.ResponseWriter, r *http.Request) {
-	var data structs.RequestModUpload
-	err := json.NewDecoder(r.Body).Decode(&data)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	userID, err := user.GetUserWithToken(data.Token)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	modObj, err := database.GetMod(data.ID)
-
-	if modObj.Author != userID {
-		http.Error(w, "you dont own this mod", http.StatusBadRequest)
-		return
-	}
-	if modObj.RepositoryUrl == "" {
-		http.Error(w, "this is a legacy mod", http.StatusBadRequest)
-		return
-	}
-
-	_, err = mod.HandleModRepository("", mod.UPDATE_AND_PACKAGE, data.ID, userID)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	message.SendMessage("0", userID, fmt.Sprintf("(mod)[%s] has finished updating!", data.ID))
-}
-
 func sendReport(w http.ResponseWriter, r *http.Request) {
 	var data structs.RequestReport
 	err := json.NewDecoder(r.Body).Decode(&data)
@@ -761,60 +740,6 @@ func sendReport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ticket.AddTicket("Report of "+data.TargetID+" Reason: "+data.ReportReason, "report", data.TargetID, "", userID)
-}
-
-func changeGitUrlMod(w http.ResponseWriter, r *http.Request) {
-	var data structs.RequestModUpload
-	err := json.NewDecoder(r.Body).Decode(&data)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	userID, err := user.GetUserWithToken(data.Token)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	modObj, err := database.GetMod(data.ID)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-	}
-
-	if modObj.Author != userID {
-		http.Error(w, "you don't own this mod", http.StatusBadRequest)
-		return
-	}
-
-	_, err = ticket.GetTicketFromTargetID(data.ID, ticket.MOD_CHANGE_REPO_URL)
-
-	if err == nil {
-		http.Error(w, "there is already a ticket open for this.", http.StatusBadRequest)
-		return
-	}
-
-	err = ticket.AddTicket("Change Repository URL from "+modObj.RepositoryUrl+" to "+data.GitRepositoryUrl, ticket.MOD_CHANGE_REPO_URL, data.ID, data.GitRepositoryUrl, modObj.Author)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-	}
-}
-
-func getModCommits(w http.ResponseWriter, r *http.Request) {
-	var data structs.RequestMod
-	err := json.NewDecoder(r.Body).Decode(&data)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	path := "modrepos/" + data.ID
-	commits, err := git.GetCommits(path)
-	err = json.NewEncoder(w).Encode(commits)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
 }
 
 func getMessageCount(w http.ResponseWriter, r *http.Request) {
@@ -1082,6 +1007,83 @@ func getIP(r *http.Request) string {
 	return addr
 }
 
+func DownloadTool(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query()
+
+	if !query.Has("target") {
+		println("no target")
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
+
+	if !query.Has("tool") {
+		println("no tool")
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
+
+	var file = ""
+	if query.Get("tool") == "dolphin" {
+		if query.Get("target") == "linux" {
+			file = "static/dolphin/dolphin_linux.tar.gz"
+		}
+		if query.Get("target") == "windows" {
+			file = "static/dolphin/dolphin_windows.tar.gz"
+		}
+		if query.Get("target") == "macos" {
+			file = "static/dolphin/dolphin_macos.zip"
+		}
+	}
+
+	if query.Get("tool") == "ue4ss" {
+		file = "static/ue4ss/ue4ss.tar.gz"
+	}
+
+	if file == "" {
+		http.Error(w, "tool target could not be found", http.StatusBadRequest)
+		return
+	}
+	http.ServeFile(w, r, file)
+
+}
+
+func InitTunnel(w http.ResponseWriter, r *http.Request) {
+	var data structs.TunnelInitData
+	err := json.NewDecoder(r.Body).Decode(&data)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	err = tunnels.InitTunnel(data.TunnelID, data.ChunkSize, data.Chunks, data.FileSize)
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		print(err.Error())
+		return
+	}
+}
+
+func AddChunkFromTunnel(w http.ResponseWriter, r *http.Request) {
+	err := r.ParseMultipartForm(10 << 20)
+	if err != nil {
+		println(err.Error())
+		http.Error(w, errors.New("upload error").Error(), http.StatusForbidden)
+		return
+	}
+
+	if r.MultipartForm.Value["tunnelid"] == nil {
+		println(err.Error())
+		http.Error(w, errors.New("no tunnel id provided").Error(), http.StatusForbidden)
+		return
+	}
+	tunnelid := r.MultipartForm.Value["tunnelid"][0]
+	err = tunnels.ProcessTunnelChunk(tunnelid, r)
+	if err != nil {
+		http.Error(w, errors.New("no tunnel id provided").Error(), http.StatusForbidden)
+		print(err.Error())
+	}
+}
+
 func InitializeWebserver() {
 	go expiredOTPRoutine()
 	go expiredRateLimits()
@@ -1131,12 +1133,9 @@ func InitializeWebserver() {
 
 	mux.HandleFunc("/mod/query", queryMods)
 	mux.HandleFunc("/mod/get", getMod)
-	mux.HandleFunc("/mod/commits", getModCommits)
 	mux.HandleFunc("/mod/pagecount", getModPageCount)
 	mux.HandleFunc("/mod/count", getModCount)
 	mux.HandleFunc("/mod/publish", publishMod)
-	mux.HandleFunc("/mod/update", updateMod)
-	mux.HandleFunc("/mod/changegit", changeGitUrlMod)
 	mux.HandleFunc("/mod/delete", deleteMod)
 	mux.HandleFunc("/mod/download", getModArchive)
 	mux.HandleFunc("/mod/download/increment", incrementModDownloads)
@@ -1158,9 +1157,14 @@ func InitializeWebserver() {
 	mux.HandleFunc("/like/liked", isLiked)
 	// end like
 
-	// start git
-	mux.HandleFunc("/git/branches", gitGetBranches)
-	// end git
+	// start tool
+	mux.HandleFunc("/tool/download", DownloadTool)
+	// end tool
+
+	//start tunnel
+	mux.HandleFunc("/tunnel/init", InitTunnel)
+	mux.HandleFunc("/tunnel/chunk", AddChunkFromTunnel)
+	//end tunnel
 
 	// end bindings
 

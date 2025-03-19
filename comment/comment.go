@@ -11,7 +11,14 @@ import (
 )
 
 func SendComment(id string, pageID string, content string) error {
-	message.SendMessage("0", id, "Please mind your language when commenting.")
+
+	if goaway.IsProfane(content) {
+		err := message.SendMessage("0", id, "Please mind your language when commenting.")
+		if err != nil {
+			return err
+		}
+	}
+
 	filteredContent := goaway.Censor(content)
 	commentID := security.GenerateID()
 	_, err := database.Database.Exec("INSERT INTO comments (pageid, content, id, author) VALUES ($1, $2, $3, $4)", pageID, filteredContent, commentID, id)

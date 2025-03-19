@@ -17,10 +17,6 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-const (
-	MAX_PASS_LENGTH = 72
-)
-
 func InitSecurity() {
 }
 
