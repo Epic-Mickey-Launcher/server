@@ -199,7 +199,7 @@ func getModIcon(w http.ResponseWriter, r *http.Request) {
 }
 
 func registerUser(w http.ResponseWriter, r *http.Request) {
-	if config.LoadedConfig["ALLOW_REGISTRATION"] != "off" {
+	if config.LoadedConfig["ALLOW_REGISTRATION"] == "off" {
 		http.Error(w, "sorry, we are not allowing registrations at the moment.", http.StatusForbidden)
 		return
 	}
