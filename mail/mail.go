@@ -85,6 +85,25 @@ func GetEmailOptions(id string) structs.EmailOptions {
 	return result
 }
 
+func VerifyEmail(to string, id string, key string) {
+	user, err := database.GetUser(id)
+	if err != nil {
+		return
+	}
+
+	buffer, err := os.ReadFile("email/verifyEmail.html")
+	if err != nil {
+		return
+	}
+
+	strBuff := string(buffer)
+
+	strBuff = strings.ReplaceAll(strBuff, "{USERNAME}", user.Username)
+	strBuff = strings.ReplaceAll(strBuff, "{EMAIL}", to)
+	strBuff = strings.ReplaceAll(strBuff, "{LINK}", fmt.Sprintf("%suser/email/auth?key=%s", config.LoadedConfig["URL"], key))
+	SendMail(to, "Verify your E-Mail!", strBuff)
+}
+
 func ForgotPasswordEmail(to string, id string, token string) {
 	user, err := database.GetUser(id)
 	if err != nil {
@@ -131,6 +150,7 @@ func SendMail(toEmail string, subject string, html string) {
 	message.SetBody("text/html", html)
 
 	err = dialer.DialAndSend(message)
+	println("Sent E-Mail (", subject, ") to ", toEmail)
 	if err != nil {
 		println(err.Error())
 	}

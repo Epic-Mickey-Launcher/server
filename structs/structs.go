@@ -88,6 +88,11 @@ type RateLimit struct {
 	ExpireDate string
 }
 
+type EmailVerifiedResponse struct {
+	Email    string
+	Verified bool
+}
+
 // Request Structures
 
 type RequestEmailOptions struct {

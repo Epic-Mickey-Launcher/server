@@ -3,6 +3,7 @@ package user
 import (
 	"database/sql"
 	"emlserver/database"
+	"emlserver/mail"
 	"emlserver/security"
 	"errors"
 	"fmt"
@@ -51,7 +52,13 @@ func ValidateUsername(username string) error {
 	}
 	return nil
 }
+func ValidateEmail(email string) error {
+	if len(strings.Split(email, "@")) > 2 {
+		return errors.New("email is invalid (>1 @)")
+	}
 
+	return nil
+}
 func ValidatePassword(password string) error {
 	if len(strings.TrimSpace(password)) < 8 {
 		return errors.New("password is too short (<8)")
@@ -96,9 +103,7 @@ func LoginUser(username string, password string) (string, error) {
 	}
 
 	err, otp := GetOneTimePassword(userid)
-
-	var otpValid bool = false
-
+	var otpValid = false
 	if err == nil {
 		otpValid = security.CompareHashToString(password, otp)
 	}
@@ -113,7 +118,17 @@ func LoginUser(username string, password string) (string, error) {
 	return "", errors.New("invalid password")
 }
 
-func CreateUser(username string, password string) (string, error) {
+func CreateEmailSetRequest(userid string, email string) error {
+
+	key, err := database.CreateEmailSetRequest(userid, email)
+	if err != nil {
+		return err
+	}
+	mail.VerifyEmail(email, userid, key)
+	return nil
+}
+
+func CreateUser(username string, password string, email string) (string, error) {
 	println("Attempting to register user: ", username)
 	err := ValidateUsername(username)
 	if err != nil {
@@ -123,6 +138,11 @@ func CreateUser(username string, password string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	err = ValidateEmail(email)
+	if err != nil {
+		return "", err
+	}
+
 	user, err := database.CreateUser()
 	if err != nil {
 		println("Failed to create user " + err.Error())
@@ -141,7 +161,18 @@ func CreateUser(username string, password string) (string, error) {
 		return "", err
 	}
 
-	return database.GenerateUserToken(user)
+	token, err := database.GenerateUserToken(user)
+
+	if strings.TrimSpace(email) != "" {
+		println("User signed up with email ", email)
+		err := CreateEmailSetRequest(user, email)
+		if err != nil {
+			println("Failed to create email request " + err.Error())
+			return "", err
+		}
+	}
+
+	return token, nil
 }
 
 func DeleteUser(userid string) error {

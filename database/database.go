@@ -106,6 +106,8 @@ func GetUser(userid string) (structs.User, error) {
 
 func DeleteUser(userid string) error {
 	_, err := Database.Exec("DELETE FROM users WHERE id=$1", userid)
+	_, _ = Database.Exec("DELETE FROM email_confirmations WHERE id=$1", userid)
+
 	return err
 }
 
@@ -127,6 +129,61 @@ func SetUsername(userid string, username string) int {
 func InitEmail(userid string) error {
 	_, err := Database.Exec("UPDATE users SET email='', emailhash='' WHERE id=$1", userid)
 	return err
+}
+
+func SetEmail(userid string, email string) error {
+	encryptedEmail := security.Encrypt(email)
+	_, err := Database.Exec("UPDATE users SET email=$1, emailhash=$2 WHERE id=$3", encryptedEmail, security.Hash(email), userid)
+	if err != nil {
+		println(err.Error())
+		return err
+	}
+	return nil
+}
+
+func CreateEmailSetRequest(userid string, email string) (string, error) {
+	row := Database.QueryRow("SELECT email FROM email_confirmations WHERE id=$1", userid)
+	var existingEmail string
+	var existingUser string
+	encryptedEmail := security.Encrypt(email)
+
+	err := row.Scan(&existingEmail)
+	if err == nil {
+		_, err = Database.Exec("DELETE FROM email_confirmations WHERE id=$1", userid)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	row = Database.QueryRow("SELECT id FROM email_confirmations WHERE email=$1", encryptedEmail)
+	err = row.Scan(&existingUser)
+
+	if err == nil {
+		if existingUser == userid {
+			return "", errors.New("you have already requested this email")
+		}
+		return "", errors.New("this email is being requested by someone else")
+	}
+
+	var existingEmailHash string
+
+	row = Database.QueryRow("SELECT id FROM users WHERE emailhash=$1", security.Hash(email))
+	err = row.Scan(&existingEmailHash)
+
+	if err == nil {
+		return "", errors.New("someone is already using this email")
+	}
+
+	key := security.GenerateUUID()
+
+	_, err = Database.Exec("INSERT INTO email_confirmations (id, email, key) VALUES  ($1, $2, $3)", userid, encryptedEmail, key)
+	if err != nil {
+		return "", err
+	}
+
+	println("Verify Key for Email Confirmation: ", key)
+
+	return key, nil
 }
 
 func SetBio(userid string, bio string) int {

@@ -125,7 +125,10 @@ func isLiked(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	json.NewEncoder(w).Encode(res)
+	err = json.NewEncoder(w).Encode(res)
+	if err != nil {
+		return
+	}
 }
 
 func setEmail(w http.ResponseWriter, r *http.Request) {
@@ -133,20 +136,124 @@ func setEmail(w http.ResponseWriter, r *http.Request) {
 	err := json.NewDecoder(r.Body).Decode(&data)
 	if err != nil {
 		println(err.Error())
+		http.Error(w, "couldn't decode request body", http.StatusForbidden)
 		return
 	}
 
 	userID, err := user.GetUserWithToken(data.Token)
 	if err != nil {
-		println(data.Token)
 		println(err.Error())
+		http.Error(w, "failed to get user with provided token", http.StatusForbidden)
 		return
 	}
 
-	encryptedEmail := security.Encrypt(data.Email)
-	_, err = database.Database.Exec("UPDATE users SET email=$1, emailhash=$2 WHERE id=$3", encryptedEmail, security.Hash(data.Email), userID)
+	err = user.CreateEmailSetRequest(userID, data.Email)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusForbidden)
+		return
+	}
+}
+func resendEmailConfirm(w http.ResponseWriter, r *http.Request) {
+	var data structs.RequestRegisterAccount
+	err := json.NewDecoder(r.Body).Decode(&data)
 	if err != nil {
 		println(err.Error())
+		http.Error(w, "couldn't decode request body", http.StatusForbidden)
+		return
+	}
+
+	userID, err := user.GetUserWithToken(data.Token)
+	if err != nil {
+		println(err.Error())
+		http.Error(w, "failed to get user with provided token", http.StatusForbidden)
+		return
+	}
+
+	row := database.Database.QueryRow("SELECT email, key FROM email_confirmations WHERE id=$1", userID)
+
+	var email string
+	var key string
+
+	err = row.Scan(&email, &key)
+
+	if err != nil {
+		println(err.Error())
+	}
+
+	mail.VerifyEmail(security.Decrypt(email), userID, key)
+}
+func getEmailVerified(w http.ResponseWriter, r *http.Request) {
+	var data structs.RequestRegisterAccount
+	err := json.NewDecoder(r.Body).Decode(&data)
+	if err != nil {
+		println(err.Error())
+		http.Error(w, "couldn't decode request body", http.StatusForbidden)
+		return
+	}
+
+	userID, err := user.GetUserWithToken(data.Token)
+	if err != nil {
+		println(err.Error())
+		http.Error(w, "failed to get user with provided token", http.StatusForbidden)
+		return
+	}
+
+	row := database.Database.QueryRow("SELECT email FROM email_confirmations WHERE id=$1", userID)
+
+	var email string
+
+	err = row.Scan(&email)
+
+	if err != nil {
+		res := structs.EmailVerifiedResponse{
+			Email:    "",
+			Verified: true,
+		}
+		err = json.NewEncoder(w).Encode(res)
+		return
+	}
+
+	res := structs.EmailVerifiedResponse{
+		Email:    security.Decrypt(email),
+		Verified: false,
+	}
+	err = json.NewEncoder(w).Encode(res)
+}
+
+func confirmEmail(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query()
+	if !query.Has("key") {
+		http.Error(w, "does not have 'key' as a query param", http.StatusBadRequest)
+		return
+	}
+
+	key := query.Get("key")
+	row := database.Database.QueryRow("SELECT id, email FROM email_confirmations WHERE key=$1", key)
+
+	var email string
+	var id string
+
+	err := row.Scan(&id, &email)
+
+	if err != nil {
+		println(err.Error())
+		http.Error(w, "couldn't get email confirmation entry - try resending the initial request", http.StatusForbidden)
+		return
+	}
+
+	_, err = database.Database.Exec("DELETE FROM email_confirmations WHERE id=$1", id)
+	if err != nil {
+		http.Error(w, "couldn't delete email confirmation entry", http.StatusForbidden)
+		return
+	}
+
+	err = database.SetEmail(id, security.Decrypt(email))
+	if err != nil {
+		return
+	}
+
+	_, err = w.Write([]byte("E-Mail confirmed! (:"))
+	if err != nil {
 		return
 	}
 }
@@ -210,7 +317,7 @@ func registerUser(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusForbidden)
 		return
 	}
-	token, err := user.CreateUser(data.Username, data.Password)
+	token, err := user.CreateUser(data.Username, data.Password, data.Email)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusForbidden)
 		return
@@ -1108,7 +1215,6 @@ func InitializeWebserver() {
 	// start user
 
 	mux.HandleFunc("/user/username", getUsername)
-	mux.HandleFunc("/user/email", getUserEmail)
 	mux.HandleFunc("/user/bio", getUserBio)
 	mux.HandleFunc("/user/idfromtoken", getIDFromToken)
 	mux.HandleFunc("/user/register", registerUser)
@@ -1124,6 +1230,10 @@ func InitializeWebserver() {
 	mux.HandleFunc("/user/set/bio", setBio)
 	mux.HandleFunc("/user/set/email", setEmail)
 	mux.HandleFunc("/user/set/email/options", updateEmailOptions)
+	mux.HandleFunc("/user/email/auth", confirmEmail)
+	mux.HandleFunc("/user/email/verified", getEmailVerified)
+	mux.HandleFunc("/user/email/resend", resendEmailConfirm)
+	mux.HandleFunc("/user/email", getUserEmail)
 	mux.HandleFunc("/user/otp", forgotPassword)
 	mux.HandleFunc("/user/otp/auth", generateOTP)
 	mux.HandleFunc("/user/count", userCount)
