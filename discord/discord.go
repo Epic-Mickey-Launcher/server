@@ -145,6 +145,18 @@ var (
 
 	commands = []*discordgo.ApplicationCommand{
 		{
+			Name:        "download",
+			Description: "Get a download link of a mod by its ID",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "id",
+					Description: "ID of the mod you want to download.",
+					Required:    true,
+				},
+			},
+		},
+		{
 			Name:        "ban",
 			Description: "Ban a user by their ID",
 			Options: []*discordgo.ApplicationCommandOption{
@@ -207,6 +219,16 @@ var (
 	}
 
 	commandHandlers = map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate){
+		"download": func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+			options := i.ApplicationCommandData().Options
+			id := options[0].Value.(string)
+			s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: config.LoadedConfig["URL"] + "mod/download?id=" + id,
+				},
+			})
+		},
 		"ban": func(s *discordgo.Session, i *discordgo.InteractionCreate) {
 			// options := i.ApplicationCommandData().Options
 			// id := options[0].Value.(string)

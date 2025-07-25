@@ -20,7 +20,8 @@ const (
 	APPROVED_STRING = "approved"
 	DENIED_STRING   = "denied"
 
-	REPORT = "report"
+	REPORT    = "report"
+	MODREVIEW = "modreview"
 )
 
 func GetStringFromResult(result int) string {
@@ -77,21 +78,44 @@ func OnTicketReview(id string) error {
 		return err
 	}
 
+	var result string
+	switch ticket.Result {
+	case APPROVED:
+		result = APPROVED_STRING
+	case DENIED:
+		result = DENIED_STRING
+	}
+	var response string
+
+	if ticket.ResultMessage != "" {
+		response = " Moderator Response: " + ticket.ResultMessage
+	}
+
 	switch ticket.Action {
-
 	case REPORT:
-		var response string
-
-		if ticket.ResultMessage != "" {
-			response = " Moderator Response: " + ticket.ResultMessage
-		}
-
 		err := message.SendMessage("0", ticket.Author, fmt.Sprintf("Your report on %s has been acknowledged by the moderation team and will be handled accordingly.", ticket.TargetID)+response)
 		if err != nil {
 			println(err.Error() + " (jamface)")
 			return err
 		}
-		break
+	case MODREVIEW:
+
+		if ticket.Result == DENIED {
+			err := database.DeleteMod(ticket.TargetID)
+			if err != nil {
+
+				println(err.Error() + " (tiestow)")
+				return err
+			}
+		} else if ticket.Result == APPROVED {
+			database.VerifyMod(ticket.TargetID)
+		}
+
+		err = message.SendMessage("0", ticket.Author, fmt.Sprintf("Your mod (%s) has been reviewed. It has been %s. ", ticket.TargetID, result)+response)
+		if err != nil {
+			println(err.Error() + " (trigo)")
+			return err
+		}
 	}
 
 	DeleteTicket(id)

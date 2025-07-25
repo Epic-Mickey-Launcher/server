@@ -10,6 +10,7 @@ import (
 	"emlserver/message"
 	"emlserver/security"
 	"emlserver/structs"
+	"emlserver/ticket"
 	"emlserver/tunnels"
 	"encoding/json"
 	"errors"
@@ -36,7 +37,7 @@ func HandleModRepository(tunnelid string, mode int, mod string, author string) {
 		mod = security.GenerateID()
 	}
 
-	var filereceived = false
+	filereceived := false
 	var archivepath string
 
 	for !filereceived {
@@ -44,7 +45,6 @@ func HandleModRepository(tunnelid string, mode int, mod string, author string) {
 		println("Checking if", tunnelid, "has finished so", mod, "can proceed.")
 
 		complete, err := tunnels.CheckTunnel(tunnelid)
-
 		if err != nil {
 			println("mod upload tunnel error")
 			return
@@ -96,7 +96,6 @@ func HandleModRepository(tunnelid string, mode int, mod string, author string) {
 	}
 
 	metadata, err := RunValidator(path)
-
 	if err != nil {
 		print("validator failed!:", err.Error())
 		err := message.SendMessage("0", author, fmt.Sprintf("Your mod upload didn't pass validation!: %s", err.Error()))
@@ -154,8 +153,6 @@ func HandleModRepository(tunnelid string, mode int, mod string, author string) {
 			return
 		}
 	}
-
-	return
 }
 
 func RunValidator(path string) (structs.ModMetadata, error) {
@@ -204,30 +201,6 @@ func parseIgnore(buffer string) []string {
 	return processedLines
 }
 
-func DeleteMod(ID string) error {
-	_, err := database.Database.Exec("DELETE FROM mods WHERE id=$1", ID)
-	if err != nil {
-		return err
-	}
-
-	err = os.RemoveAll("modrepos/" + ID)
-	if err != nil {
-		println("IO ERROR: failed to remove " + ID + " from modrepos.")
-	}
-
-	err = os.Remove("static/mods/" + ID + ".tar.gz")
-	if err != nil {
-		println("IO ERROR: failed to remove " + ID + ".tar.gz from static/mods.")
-	}
-
-	err = os.Remove("static/modimg/" + ID + ".webp")
-	if err != nil {
-		println("IO ERROR: failed to remove " + ID + ".webp from static/modimg.")
-	}
-
-	return nil
-}
-
 func UpdateModMeta(modMetadata structs.ModMetadata, ID string) error {
 	row := database.Database.QueryRow("SELECT version FROM mods WHERE id=$1", ID)
 	var version int
@@ -252,6 +225,14 @@ func AddMod(modMetadata structs.ModMetadata, publish bool, id string, author str
 		Published:   publish,
 		Version:     1,
 		Downloads:   0,
+		Verified:    false,
+	}
+
+	if config.LoadedConfig["MANUAL_REVIEW_MODS_REQUIRED"] == "off" {
+		mod.Verified = true
+	} else {
+		ticket.AddTicket("Review of "+modMetadata.Name, "modreview", id, "", author)
+		message.SendMessage("0", author, "Your mod has been uploaded successfully, but will have to be manually reviewed before being made public to the mod index for security purposes. Don't worry, this won't take too long!")
 	}
 
 	err := database.CreateMod(mod)

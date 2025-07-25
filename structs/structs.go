@@ -35,6 +35,7 @@ type Mod struct {
 	Description  string
 	Dependencies []string
 	CachedLikes  int
+	Verified     bool
 }
 
 type TunnelInitData struct {

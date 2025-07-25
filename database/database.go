@@ -21,12 +21,12 @@ var Database *sql.DB
 func GetMod(modid string) (structs.Mod, error) {
 	modResult := structs.Mod{}
 
-	row := Database.QueryRow("SELECT id, name, description, game, platform, youtube, version, author, published, downloads, likes FROM mods WHERE id=$1", modid)
+	row := Database.QueryRow("SELECT id, name, description, game, platform, youtube, version, author, published, downloads, likes, verified FROM mods WHERE id=$1", modid)
 
 	err := row.Scan(&modResult.ID, &modResult.Name, &modResult.Description,
 		&modResult.Game, &modResult.Platform, &modResult.Video,
 		&modResult.Version, &modResult.Author, &modResult.Published,
-		&modResult.Downloads, &modResult.CachedLikes)
+		&modResult.Downloads, &modResult.CachedLikes, &modResult.Verified)
 
 	return modResult, err
 }
@@ -272,7 +272,7 @@ func QueryMods(modQuery structs.RequestModQuery) ([]string, int, error) {
 	query := `SELECT id FROM mods `
 	conditions := `WHERE ($1='' OR author=$1) 
                    AND   ($2='' OR name ILIKE  '%' || $2 || '%')
-          	       AND   (published=B'1' OR (published=B'0' AND author=$3))
+          	       AND   (published=B'1' OR (published=B'0' AND author=$3)) AND (verified=TRUE OR (verified=FALSE AND author=$3))
                    AND   (($4='' OR game=$4) AND ($5='' OR platform=$5))`
 
 	var order string
@@ -280,22 +280,16 @@ func QueryMods(modQuery structs.RequestModQuery) ([]string, int, error) {
 	switch modQuery.Order {
 	case 0: // Newest
 		order = "GROUP BY id ORDER BY id DESC "
-		break
 	case 1: // Oldest
-		order = "GROUP BY id ORDER BY id "
-		break
+		order = "GROUP BY id ORDER BY id ASC"
 	case 2: // Most Downloads
 		order = "GROUP BY id ORDER BY downloads DESC "
-		break
 	case 3: // Least Downloads
 		order = "GROUP BY id ORDER BY downloads ASC "
-		break
 	case 4: // Most Likes
 		order = "GROUP BY id ORDER BY likes DESC "
-		break
 	case 5: // Least Likes
 		order = "GROUP BY id ORDER BY likes ASC "
-		break
 	}
 
 	limits := `LIMIT $6 OFFSET $7`
@@ -338,18 +332,21 @@ func QueryMods(modQuery structs.RequestModQuery) ([]string, int, error) {
 
 	return idArray, int(pages), nil
 }
+
 func GetUserCount() (int, error) {
 	row := Database.QueryRow("SELECT COUNT(*) FROM users")
 	var count int
 	err := row.Scan(&count)
 	return count, err
 }
+
 func GetModCount() (int, error) {
 	row := Database.QueryRow("SELECT COUNT(*) FROM mods")
 	var count int
 	err := row.Scan(&count)
 	return count, err
 }
+
 func CreateMod(mod structs.Mod) error {
 	var publish int
 	if mod.Published {
@@ -358,7 +355,7 @@ func CreateMod(mod structs.Mod) error {
 		publish = 0
 	}
 
-	_, err := Database.Exec("INSERT INTO mods (id, name, description, game, platform, youtube, version, author, published, downloads, likes) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)", mod.ID, mod.Name, mod.Description, mod.Game, mod.Platform, mod.Video, 0, mod.Author, publish, 0, 1)
+	_, err := Database.Exec("INSERT INTO mods (id, name, description, game, platform, youtube, version, author, published, downloads, likes, verified) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)", mod.ID, mod.Name, mod.Description, mod.Game, mod.Platform, mod.Video, 0, mod.Author, publish, 0, 1, mod.Verified)
 	if err != nil {
 		println(err.Error())
 		return errors.New("failed to create database entry")
@@ -367,6 +364,35 @@ func CreateMod(mod structs.Mod) error {
 	LikePage(mod.Author, mod.ID)
 
 	return nil
+}
+
+func DeleteMod(ID string) error {
+	_, err := Database.Exec("DELETE FROM mods WHERE id=$1", ID)
+	if err != nil {
+		return err
+	}
+
+	err = os.RemoveAll("modrepos/" + ID)
+	if err != nil {
+		println("IO ERROR: failed to remove " + ID + " from modrepos.")
+	}
+
+	err = os.Remove("static/mods/" + ID + ".tar.gz")
+	if err != nil {
+		println("IO ERROR: failed to remove " + ID + ".tar.gz from static/mods.")
+	}
+
+	err = os.Remove("static/modimg/" + ID + ".webp")
+	if err != nil {
+		println("IO ERROR: failed to remove " + ID + ".webp from static/modimg.")
+	}
+
+	return nil
+}
+
+func VerifyMod(modID string) error {
+	_, err := Database.Exec("UPDATE mods SET verified=TRUE WHERE id=$1 ", modID)
+	return err
 }
 
 func UpdateModCachedLikes(modID string) error {
@@ -404,6 +430,6 @@ func HasRateLimit(ip string, typeLimit string, pageid string) bool {
 }
 
 func AddRateLimit(ip string, expirydate int64, typeLimit string, pageid string) error {
-	_, err := Database.Exec("INSERT INTO ratelimits (ip, expirydate, pageid, type) VALUES ($1, $2, $3, $4)", ip, expirydate, typeLimit, pageid)
+	_, err := Database.Exec("INSERT INTO ratelimits (ip, expirydate, pageid, type) VALUES ($1, $2, $3, $4)", ip, expirydate, pageid, typeLimit)
 	return err
 }

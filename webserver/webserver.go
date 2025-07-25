@@ -153,6 +153,7 @@ func setEmail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 }
+
 func resendEmailConfirm(w http.ResponseWriter, r *http.Request) {
 	var data structs.RequestRegisterAccount
 	err := json.NewDecoder(r.Body).Decode(&data)
@@ -175,13 +176,13 @@ func resendEmailConfirm(w http.ResponseWriter, r *http.Request) {
 	var key string
 
 	err = row.Scan(&email, &key)
-
 	if err != nil {
 		println(err.Error())
 	}
 
 	mail.VerifyEmail(security.Decrypt(email), userID, key)
 }
+
 func getEmailVerified(w http.ResponseWriter, r *http.Request) {
 	var data structs.RequestRegisterAccount
 	err := json.NewDecoder(r.Body).Decode(&data)
@@ -203,7 +204,6 @@ func getEmailVerified(w http.ResponseWriter, r *http.Request) {
 	var email string
 
 	err = row.Scan(&email)
-
 	if err != nil {
 		res := structs.EmailVerifiedResponse{
 			Email:    "",
@@ -234,7 +234,6 @@ func confirmEmail(w http.ResponseWriter, r *http.Request) {
 	var id string
 
 	err := row.Scan(&id, &email)
-
 	if err != nil {
 		println(err.Error())
 		http.Error(w, "couldn't get email confirmation entry - try resending the initial request", http.StatusForbidden)
@@ -571,6 +570,18 @@ func getModArchive(w http.ResponseWriter, r *http.Request) {
 }
 
 func publishMod(w http.ResponseWriter, r *http.Request) {
+	addr := getIP(r)
+	if addr == "" {
+		http.Error(w, "couldn't retrieve ip address for ratelimit.", http.StatusBadRequest)
+		return
+	}
+	hashedAddr := security.Hash(addr)
+	if database.HasRateLimit(hashedAddr, "upload_mod", "") {
+		http.Error(w, "you are being ratelimited. please wait before uploading another mod.", http.StatusTooManyRequests)
+		return
+	}
+	expiryDate, _ := time.ParseDuration("20m")
+	database.AddRateLimit(hashedAddr, time.Now().Unix()+int64(expiryDate.Seconds()), "upload_mod", "")
 	var data structs.RequestModUpload
 	err := json.NewDecoder(r.Body).Decode(&data)
 	if err != nil {
@@ -826,7 +837,7 @@ func deleteMod(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "you do not own this mod", http.StatusForbidden)
 	}
 
-	mod.DeleteMod(modObj.ID)
+	database.DeleteMod(modObj.ID)
 }
 
 func sendReport(w http.ResponseWriter, r *http.Request) {
@@ -1071,12 +1082,12 @@ func incrementModDownloads(w http.ResponseWriter, r *http.Request) {
 	}
 	addr := getIP(r)
 	if addr == "" {
-		http.Error(w, "couldn't retrieve IP address for ratelimit.", http.StatusBadRequest)
+		http.Error(w, "couldn't retrieve ip address for ratelimit.", http.StatusBadRequest)
 		return
 	}
 	hashedAddr := security.Hash(addr)
 
-	if database.HasRateLimit(addr, "mod_increment_downloads", data.ID) {
+	if database.HasRateLimit(hashedAddr, "mod_increment_downloads", data.ID) {
 		return
 	}
 
@@ -1113,7 +1124,8 @@ func getIP(r *http.Request) string {
 	if addr == "" {
 		addr = r.RemoteAddr
 	}
-	return addr
+
+	return strings.Split(addr, ":")[0]
 }
 
 func DownloadTool(w http.ResponseWriter, r *http.Request) {
@@ -1131,7 +1143,7 @@ func DownloadTool(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var file = ""
+	file := ""
 	if query.Get("tool") == "dolphin" {
 		if query.Get("target") == "linux" {
 			file = "static/dolphin/dolphin_linux.tar.gz"
@@ -1153,7 +1165,6 @@ func DownloadTool(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.ServeFile(w, r, file)
-
 }
 
 func InitTunnel(w http.ResponseWriter, r *http.Request) {
@@ -1164,7 +1175,6 @@ func InitTunnel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	err = tunnels.InitTunnel(data.TunnelID, data.ChunkSize, data.Chunks, data.FileSize)
-
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		print(err.Error())
@@ -1273,10 +1283,10 @@ func InitializeWebserver() {
 	mux.HandleFunc("/tool/download", DownloadTool)
 	// end tool
 
-	//start tunnel
+	// start tunnel
 	mux.HandleFunc("/tunnel/init", InitTunnel)
 	mux.HandleFunc("/tunnel/chunk", AddChunkFromTunnel)
-	//end tunnel
+	// end tunnel
 
 	// end bindings
 
