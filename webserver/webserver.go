@@ -679,9 +679,7 @@ func getModPageCount(w http.ResponseWriter, r *http.Request) {
 }
 
 func getModCount(w http.ResponseWriter, r *http.Request) {
-	row := database.Database.QueryRow("SELECT COUNT(*) FROM mods")
-	var count int
-	err := row.Scan(&count)
+	count, err := database.GetModCount()
 	if err != nil {
 		http.Error(w, "failed to get mod count", http.StatusForbidden)
 	}
@@ -1054,10 +1052,14 @@ func queryComment(w http.ResponseWriter, r *http.Request) {
 }
 
 func userCount(w http.ResponseWriter, r *http.Request) {
-	row := database.Database.QueryRow("SELECT COUNT(*) FROM users")
-	var count int
-	row.Scan(&count)
-	w.Write([]byte(fmt.Sprint(count)))
+	count, err := database.GetUserCount()
+	if err != nil {
+		http.Error(w, "can't get user count.", http.StatusBadRequest)
+	}
+	_, err = w.Write([]byte(fmt.Sprint(count)))
+	if err != nil {
+		return
+	}
 }
 
 func incrementModDownloads(w http.ResponseWriter, r *http.Request) {

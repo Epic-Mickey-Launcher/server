@@ -338,7 +338,18 @@ func QueryMods(modQuery structs.RequestModQuery) ([]string, int, error) {
 
 	return idArray, int(pages), nil
 }
-
+func GetUserCount() (int, error) {
+	row := Database.QueryRow("SELECT COUNT(*) FROM users")
+	var count int
+	err := row.Scan(&count)
+	return count, err
+}
+func GetModCount() (int, error) {
+	row := Database.QueryRow("SELECT COUNT(*) FROM mods")
+	var count int
+	err := row.Scan(&count)
+	return count, err
+}
 func CreateMod(mod structs.Mod) error {
 	var publish int
 	if mod.Published {

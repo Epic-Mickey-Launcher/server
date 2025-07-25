@@ -54,8 +54,27 @@ func BeginClient() error {
 	})
 
 	Client = client
-
+	go SetStatusRoutine()
 	return nil
+}
+
+func SetStatusRoutine() {
+	for {
+		modCount, err := database.GetModCount()
+		if err != nil {
+			continue
+		}
+		userCount, err := database.GetUserCount()
+		if err != nil {
+			continue
+		}
+		err = Client.UpdateCustomStatus(fmt.Sprint(userCount, " Users / ", modCount, " Mods"))
+		if err != nil {
+			continue
+		}
+
+		time.Sleep(10 * time.Second)
+	}
 }
 
 func PrintTicket(ticket structs.Ticket) *discordgo.MessageEmbed {
