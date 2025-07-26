@@ -520,7 +520,7 @@ func loginUser(w http.ResponseWriter, r *http.Request) {
 	} else {
 		token, err := user.LoginUser(data.Username, data.Password)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			http.Error(w, err.Error(), http.StatusForbidden)
 			return
 		} else {
 			_, err = w.Write([]byte(token))
