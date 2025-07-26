@@ -19,7 +19,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"go/types"
 	"io"
 	"net/http"
 	"os"
