@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"go/types"
 	"io"
 	"net/http"
 	"os"
@@ -328,6 +329,18 @@ func registerUser(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusForbidden)
 		return
 	}
+
+	if config.LoadedConfig["REGISTRATION_REQUIRES_CAPTCHA"] == "on" {
+		valid := captcha.ValidateCaptcha(data.Captcha)
+
+		if !valid {
+			expiryDate, _ := time.ParseDuration("1m")
+			database.AddRateLimit(hashedAddr, time.Now().Unix()+int64(expiryDate.Seconds()), "register", "")
+			http.Error(w, "captcha was not passed. please wait 1 minute before trying again.", http.StatusForbidden)
+			return
+		}
+	}
+
 	token, err := user.CreateUser(data.Username, data.Password, data.Email)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusForbidden)
@@ -595,13 +608,22 @@ func publishMod(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "you are being ratelimited. please wait before uploading another mod.", http.StatusTooManyRequests)
 		return
 	}
-	expiryDate, _ := time.ParseDuration("20m")
-	database.AddRateLimit(hashedAddr, time.Now().Unix()+int64(expiryDate.Seconds()), "upload_mod", "")
 	var data structs.RequestModUpload
 	err := json.NewDecoder(r.Body).Decode(&data)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
+	}
+
+	if config.LoadedConfig["MOD_UPLOAD_REQUIRES_CAPTCHA"] == "on" {
+		valid := captcha.ValidateCaptcha(data.Captcha)
+
+		if !valid {
+			expiryDate, _ := time.ParseDuration("2m")
+			database.AddRateLimit(hashedAddr, time.Now().Unix()+int64(expiryDate.Seconds()), "upload_mod", "")
+			http.Error(w, "captcha was not passed. please wait 2 minutes before trying again", http.StatusForbidden)
+			return
+		}
 	}
 
 	if strings.TrimSpace(data.Token) == "" {
@@ -640,6 +662,10 @@ func publishMod(w http.ResponseWriter, r *http.Request) {
 
 	go mod.HandleModRepository(tunnel, mode, data.ID, userid)
 	println("tunnel created for mod upload:", tunnel)
+
+	expiryDate, _ := time.ParseDuration("20m")
+	database.AddRateLimit(hashedAddr, time.Now().Unix()+int64(expiryDate.Seconds()), "upload_mod", "")
+
 	_, err = w.Write([]byte(tunnel))
 	if err != nil {
 		println("Error writing response for publishing mod")
@@ -1222,17 +1248,15 @@ func newCaptcha(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(captcha.CreateCaptcha()))
 }
 
-// temp
-func validateCaptcha(w http.ResponseWriter, r *http.Request) {
-	var data structs.CaptchaResult
-	err := json.NewDecoder(r.Body).Decode(&data)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+func getSecuritySettings(w http.ResponseWriter, r *http.Request) {
+	settings := structs.SecuritySettings{
+		AllowRegistration:           config.LoadedConfig["ALLOW_REGISTRATION"] == "on",
+		AllowMods:                   config.LoadedConfig["ALLOW_MODS"] == "on",
+		ModManualReviewRequired:     config.LoadedConfig["MANUAL_REVIEW_MODS_REQUIRED"] == "on",
+		RegistrationRequiresCaptcha: config.LoadedConfig["REGISTRATION_REQUIRES_CAPTCHA"] == "on",
+		ModUploadRequiresCaptcha:    config.LoadedConfig["MOD_UPLOAD_REQUIRES_CAPTCHA"] == "on",
 	}
-
-	result := captcha.ValidateCaptcha(data.Token)
-	w.Write([]byte(strconv.FormatBool(result)))
+	json.NewEncoder(w).Encode(settings)
 }
 
 func InitializeWebserver() {
@@ -1286,7 +1310,6 @@ func InitializeWebserver() {
 	// start captcha
 
 	mux.HandleFunc("/captcha/new", newCaptcha)
-	mux.HandleFunc("/captcha/validate", validateCaptcha)
 	// end captcha
 
 	// start mod
@@ -1325,6 +1348,10 @@ func InitializeWebserver() {
 	mux.HandleFunc("/tunnel/init", InitTunnel)
 	mux.HandleFunc("/tunnel/chunk", AddChunkFromTunnel)
 	// end tunnel
+
+	// start server
+	mux.HandleFunc("/server/security", getSecuritySettings)
+	// end server
 
 	// end bindings
 

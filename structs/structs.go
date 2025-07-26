@@ -1,5 +1,13 @@
 package structs
 
+type SecuritySettings struct {
+	AllowRegistration           bool
+	AllowMods                   bool
+	ModManualReviewRequired     bool
+	RegistrationRequiresCaptcha bool
+	ModUploadRequiresCaptcha    bool
+}
+
 type User struct {
 	Username  string
 	Password  string
@@ -134,6 +142,7 @@ type RequestRegisterAccount struct {
 	Password string `json:"password"`
 	Token    string `json:"token"`
 	Email    string `json:"email"`
+	Captcha  string `json:"captcha"`
 	Bio      string
 }
 
@@ -157,6 +166,7 @@ type RequestModUpload struct {
 	Token   string
 	ID      string
 	Publish bool
+	Captcha string
 }
 
 type RequestMod struct {
