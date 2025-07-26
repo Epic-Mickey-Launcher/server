@@ -15,6 +15,10 @@ type ToolTargetDownload struct {
 	Name     string
 }
 
+type CaptchaResult struct {
+	Token string
+}
+
 type OTP struct {
 	UserID            string
 	PasswordGenerated string

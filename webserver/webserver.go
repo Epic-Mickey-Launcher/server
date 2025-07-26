@@ -1,6 +1,7 @@
 package webserver
 
 import (
+	"emlserver/captcha"
 	"emlserver/comment"
 	"emlserver/config"
 	"emlserver/database"
@@ -1217,6 +1218,23 @@ func AddChunkFromTunnel(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func newCaptcha(w http.ResponseWriter, r *http.Request) {
+	w.Write([]byte(captcha.CreateCaptcha()))
+}
+
+// temp
+func validateCaptcha(w http.ResponseWriter, r *http.Request) {
+	var data structs.CaptchaResult
+	err := json.NewDecoder(r.Body).Decode(&data)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	result := captcha.ValidateCaptcha(data.Token)
+	w.Write([]byte(strconv.FormatBool(result)))
+}
+
 func InitializeWebserver() {
 	go expiredOTPRoutine()
 	go expiredRateLimits()
@@ -1264,6 +1282,12 @@ func InitializeWebserver() {
 	mux.HandleFunc("/user/otp/auth", generateOTP)
 	mux.HandleFunc("/user/count", userCount)
 	// end user
+
+	// start captcha
+
+	mux.HandleFunc("/captcha/new", newCaptcha)
+	mux.HandleFunc("/captcha/validate", validateCaptcha)
+	// end captcha
 
 	// start mod
 
