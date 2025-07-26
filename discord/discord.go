@@ -3,6 +3,7 @@ package discord
 import (
 	"emlserver/config"
 	"emlserver/database"
+	"emlserver/mail"
 	"emlserver/structs"
 	"emlserver/ticket"
 	"fmt"
@@ -157,6 +158,18 @@ var (
 			},
 		},
 		{
+			Name:        "testemail",
+			Description: "Send a test email to a specified address to test server email connection.",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "email-address",
+					Description: "Address of the email you want to send the test mail to.",
+					Required:    true,
+				},
+			},
+		},
+		{
 			Name:        "ban",
 			Description: "Ban a user by their ID",
 			Options: []*discordgo.ApplicationCommandOption{
@@ -226,6 +239,18 @@ var (
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
 					Content: config.LoadedConfig["URL"] + "mod/download?id=" + id,
+				},
+			})
+		},
+		"testemail": func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+			options := i.ApplicationCommandData().Options
+			email := options[0].Value.(string)
+			mail.TestEmail(email)
+
+			s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: "Test Email Sent",
 				},
 			})
 		},

@@ -137,7 +137,18 @@ func NewMessageEmail(fromUsername string, toUsername string, content string, ema
 	SendMail(email, "New message from "+fromUsername, strBuff)
 }
 
-func SendMail(toEmail string, subject string, html string) {
+func TestEmail(email string) error {
+	buffer, err := os.ReadFile("email/test.html")
+	if err != nil {
+		return err
+	}
+
+	strBuff := string(buffer)
+	strBuff = strings.ReplaceAll(strBuff, "{EMAIL}", strings.Split(email, "@")[0])
+	return SendMail(email, "Test E-Mail", strBuff)
+}
+
+func SendMail(toEmail string, subject string, html string) error {
 	port, err := strconv.Atoi(config.LoadedConfig["EMAIL_PORT"])
 	if err != nil {
 		panic(err)
@@ -151,7 +162,10 @@ func SendMail(toEmail string, subject string, html string) {
 
 	err = dialer.DialAndSend(message)
 	println("Sent E-Mail (", subject, ") to ", toEmail)
+
 	if err != nil {
-		println(err.Error())
+		fmt.Printf("E-Mail Send Failure: [Error: %s] [Subject: %s]", err.Error(), subject)
 	}
+
+	return err
 }
