@@ -56,7 +56,7 @@ func ConnectDatabase() {
 		println("Error: Could not ping Database: ", err)
 	}
 
-	println("Connection successful.")
+	println("PGSQL Database Connection successful.")
 
 	Database = _db
 }
