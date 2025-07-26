@@ -266,6 +266,9 @@ var (
 				embed := &discordgo.MessageEmbed{
 					Author: &discordgo.MessageEmbedAuthor{},
 					Color:  0xa434eb,
+					Image: &discordgo.MessageEmbedImage{
+						URL: fmt.Sprintf("%simg/userpfp?id=%s", config.LoadedConfig["URL"], user.ID),
+					},
 					Fields: []*discordgo.MessageEmbedField{
 						{
 							Name:   "Bio",
@@ -297,6 +300,9 @@ var (
 				embed := &discordgo.MessageEmbed{
 					Author: &discordgo.MessageEmbedAuthor{},
 					Color:  0xa434eb,
+					Image: &discordgo.MessageEmbedImage{
+						URL: fmt.Sprintf("%simg/modicon?id=%s", config.LoadedConfig["URL"], mod.ID),
+					},
 					Fields: []*discordgo.MessageEmbedField{
 						{
 							Name:   "Description",
@@ -337,6 +343,11 @@ var (
 						{
 							Name:   "Published",
 							Value:  strconv.FormatBool(mod.Published),
+							Inline: true,
+						},
+						{
+							Name:   "Verified",
+							Value:  strconv.FormatBool(mod.Verified),
 							Inline: true,
 						},
 						{
