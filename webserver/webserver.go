@@ -57,9 +57,31 @@ func generateOTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func forgotPassword(w http.ResponseWriter, r *http.Request) {
+	addr := getIP(r)
+	if addr == "" {
+		http.Error(w, "couldn't retrieve ip address for ratelimit.", http.StatusBadRequest)
+		return
+	}
+
+	hashedAddr := security.Hash(addr)
+	if database.HasRateLimit(hashedAddr, "forgot_password", "") {
+		http.Error(w, "you are being ratelimited. please wait before sending another request.", http.StatusTooManyRequests)
+		return
+	}
+
 	var data structs.RequestRegisterAccount
 	err := json.NewDecoder(r.Body).Decode(&data)
 	if err != nil {
+		return
+	}
+
+	valid := captcha.ValidateCaptcha(data.Captcha)
+
+	if !valid {
+
+		expiryDate, _ := time.ParseDuration("5m")
+		database.AddRateLimit(hashedAddr, time.Now().Unix()+int64(expiryDate.Seconds()), "forgot_password", "")
+		http.Error(w, "captcha was not passed. please wait 5 minutes before trying again.", http.StatusBadRequest)
 		return
 	}
 
@@ -85,6 +107,9 @@ func forgotPassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	mail.ForgotPasswordEmail(data.Email, id, token)
+
+	expiryDate, _ := time.ParseDuration("10m")
+	database.AddRateLimit(hashedAddr, time.Now().Unix()+int64(expiryDate.Seconds()), "forgot_password", "")
 }
 
 func likePage(w http.ResponseWriter, r *http.Request) {
@@ -1050,6 +1075,19 @@ func deleteComment(w http.ResponseWriter, r *http.Request) {
 }
 
 func sendComment(w http.ResponseWriter, r *http.Request) {
+	addr := getIP(r)
+	if addr == "" {
+		http.Error(w, "couldn't retrieve ip address for ratelimit.", http.StatusBadRequest)
+		return
+	}
+
+	hashedAddr := security.Hash(addr)
+
+	if database.HasRateLimit(hashedAddr, "comment", "") {
+		http.Error(w, "you are being ratelimited. please wait before sending another comment.", http.StatusBadRequest)
+		return
+	}
+
 	var data structs.RequestComment
 	err := json.NewDecoder(r.Body).Decode(&data)
 	if err != nil {
@@ -1070,6 +1108,9 @@ func sendComment(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+
+	expiryDate, _ := time.ParseDuration("5m")
+	database.AddRateLimit(hashedAddr, time.Now().Unix()+int64(expiryDate.Seconds()), "comment", "")
 }
 
 func getComment(w http.ResponseWriter, r *http.Request) {

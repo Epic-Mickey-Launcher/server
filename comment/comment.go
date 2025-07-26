@@ -5,12 +5,20 @@ import (
 	"emlserver/message"
 	"emlserver/security"
 	"emlserver/structs"
+	"errors"
 	"slices"
 
 	"github.com/TwiN/go-away"
 )
 
 func SendComment(id string, pageID string, content string) error {
+	rows := database.Database.QueryRow("SELECT author FROM comments WHERE pageid=$1 AND author=$2", pageID, id)
+
+	var buff string
+	err := rows.Scan(&buff)
+	if err == nil {
+		return errors.New("you cannot post more than one comment per mod.")
+	}
 
 	if goaway.IsProfane(content) {
 		err := message.SendMessage("0", id, "Please mind your language when commenting.")
@@ -21,7 +29,7 @@ func SendComment(id string, pageID string, content string) error {
 
 	filteredContent := goaway.Censor(content)
 	commentID := security.GenerateID()
-	_, err := database.Database.Exec("INSERT INTO comments (pageid, content, id, author) VALUES ($1, $2, $3, $4)", pageID, filteredContent, commentID, id)
+	_, err = database.Database.Exec("INSERT INTO comments (pageid, content, id, author) VALUES ($1, $2, $3, $4)", pageID, filteredContent, commentID, id)
 	return err
 }
 
