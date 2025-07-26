@@ -111,7 +111,7 @@ func OnTicketReview(id string) error {
 			database.VerifyMod(ticket.TargetID)
 		}
 
-		err = message.SendMessage("0", ticket.Author, fmt.Sprintf("Your mod (%s) has been reviewed. It has been %s. ", ticket.TargetID, result)+response)
+		err = message.SendMessage("0", ticket.Author, fmt.Sprintf("Your mod <%s> has been reviewed. It has been %s. ", ticket.TargetID, result)+response)
 		if err != nil {
 			println(err.Error() + " (trigo)")
 			return err
