@@ -245,23 +245,13 @@ var (
 		"testemail": func(s *discordgo.Session, i *discordgo.InteractionCreate) {
 			options := i.ApplicationCommandData().Options
 			email := options[0].Value.(string)
-			err := mail.TestEmail(email)
-
-			if err == nil {
-				s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-					Type: discordgo.InteractionResponseChannelMessageWithSource,
-					Data: &discordgo.InteractionResponseData{
-						Content: "Test Email Sent",
-					},
-				})
-			} else {
-				s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-					Type: discordgo.InteractionResponseChannelMessageWithSource,
-					Data: &discordgo.InteractionResponseData{
-						Content: "Test Email Send Failed!",
-					},
-				})
-			}
+			s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: "Test Email Sent",
+				},
+			})
+			mail.TestEmail(email)
 		},
 		"ban": func(s *discordgo.Session, i *discordgo.InteractionCreate) {
 			// options := i.ApplicationCommandData().Options
