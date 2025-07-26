@@ -310,6 +310,17 @@ func registerUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	addr := getIP(r)
+	if addr == "" {
+		http.Error(w, "couldn't retrieve ip address for ratelimit.", http.StatusBadRequest)
+		return
+	}
+	hashedAddr := security.Hash(addr)
+	if database.HasRateLimit(hashedAddr, "register", "") {
+		http.Error(w, "you are being ratelimited. please wait before registering again.", http.StatusTooManyRequests)
+		return
+	}
+
 	var data structs.RequestRegisterAccount
 	err := json.NewDecoder(r.Body).Decode(&data)
 	if err != nil {
@@ -321,6 +332,9 @@ func registerUser(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusForbidden)
 		return
 	}
+
+	expiryDate, _ := time.ParseDuration("2h")
+	database.AddRateLimit(hashedAddr, time.Now().Unix()+int64(expiryDate.Seconds()), "register", "")
 
 	_, err = w.Write([]byte(token))
 	if err != nil {
