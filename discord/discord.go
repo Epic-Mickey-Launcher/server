@@ -140,7 +140,6 @@ func NewModMessage(releaseType int, mod structs.Mod) {
 		Footer: &discordgo.MessageEmbedFooter{
 			Text: "https://eml.kalsvik.no | Jonas Kalsvik",
 		},
-		Timestamp: string(fmt.Sprintf("%d", time.Now().Unix())),
 	}
 	_, err = Client.ChannelMessageSendEmbed(statusChannelID, embed)
 	if err != nil {
@@ -166,7 +165,6 @@ func NewMemberMessage() {
 		Footer: &discordgo.MessageEmbedFooter{
 			Text: "https://eml.kalsvik.no | Jonas Kalsvik",
 		},
-		Timestamp: string(fmt.Sprintf("%d", time.Now().Unix())),
 	}
 
 	_, err = Client.ChannelMessageSendEmbed(statusChannelID, embed)
