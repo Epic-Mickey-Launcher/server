@@ -4,6 +4,7 @@ import (
 	"emlserver/config"
 	"emlserver/database"
 	"emlserver/mail"
+	"emlserver/mod"
 	"emlserver/structs"
 	"emlserver/ticket"
 	"fmt"
@@ -15,22 +16,32 @@ import (
 )
 
 var (
-	Client    *discordgo.Session
-	channelID string
-	roleID    string
-	guildID   string
+	Client          *discordgo.Session
+	channelID       string
+	statusChannelID string
+	roleID          string
+	guildID         string
 )
 
 func BeginClient() error {
 	channelID = config.LoadedConfig["DISCORD_ID"]
 	roleID = config.LoadedConfig["DISCORD_ROLE"]
 	guildID = config.LoadedConfig["DISCORD_GUILDID"]
+	statusChannelID = config.LoadedConfig["DISCORD_STATUS_CHANNEL"]
 
 	ticket.DiscordReportTicket = func(ticket structs.Ticket) {
 		err := ReportTicket(ticket)
 		if err != nil {
 			return
 		}
+	}
+
+	database.DiscordOnUserRegister = func() {
+		NewMemberMessage()
+	}
+
+	mod.DiscordOnModAction = func(releaseType int, modData structs.Mod) {
+		NewModMessage(releaseType, modData)
 	}
 
 	client, err := discordgo.New("Bot " + config.LoadedConfig["DISCORD_TOKEN"])
@@ -76,6 +87,84 @@ func SetStatusRoutine() {
 
 		time.Sleep(10 * time.Second)
 	}
+}
+
+const (
+	MOD_CREATED = 0
+	MOD_UPDATED = 1
+)
+
+func NewModMessage(releaseType int, mod structs.Mod) {
+	var title string
+
+	if releaseType == MOD_CREATED {
+		title = "A new mod has been uploaded!"
+	} else {
+		title = "A mod has been updated!"
+	}
+
+	user, err := database.GetUser(mod.Author)
+	if err != nil {
+		println(err.Error())
+		return
+	}
+
+	embed := &discordgo.MessageEmbed{
+		Color: 0xa434eb,
+		Title: title,
+		Fields: []*discordgo.MessageEmbedField{
+			{
+				Name:  mod.Name,
+				Value: mod.Description,
+			},
+
+			{
+				Name:  fmt.Sprintf("Uploaded by: %s", user.Username),
+				Value: fmt.Sprintf("Current Version: %d", mod.Version),
+			},
+
+			{
+				Name:  fmt.Sprintf("Downloads: %d", mod.Downloads),
+				Value: fmt.Sprintf("Likes: %d", mod.CachedLikes),
+			},
+		},
+
+		Image: &discordgo.MessageEmbedImage{
+			Width:  64,
+			Height: 64,
+			URL:    fmt.Sprintf("%simg/modicon?id=%s", config.LoadedConfig["URL"], mod.ID),
+		},
+
+		Footer: &discordgo.MessageEmbedFooter{
+			Text: "https://eml.kalsvik.no | Jonas Kalsvik",
+		},
+		Timestamp: string(fmt.Sprintf("%d", time.Now().Unix())),
+	}
+	Client.ChannelMessageSendEmbed(statusChannelID, embed)
+}
+
+func NewMemberMessage() {
+	count, err := database.GetUserCount()
+	if err != nil {
+		return
+	}
+
+	embed := &discordgo.MessageEmbed{
+		Color: 0xa434eb,
+		Title: "A new member has registered!",
+		Fields: []*discordgo.MessageEmbedField{
+			{
+				Name: "New Member Count", Value: fmt.Sprintf("%d", count),
+			},
+		},
+
+		Footer: &discordgo.MessageEmbedFooter{
+			Text: "https://eml.kalsvik.no | Jonas Kalsvik",
+		},
+		Timestamp: string(fmt.Sprintf("%d", time.Now().Unix())),
+	}
+
+	Client.ChannelMessageSendEmbed(statusChannelID, embed)
 }
 
 func PrintTicket(ticket structs.Ticket) *discordgo.MessageEmbed {
@@ -301,7 +390,9 @@ var (
 					Author: &discordgo.MessageEmbedAuthor{},
 					Color:  0xa434eb,
 					Image: &discordgo.MessageEmbedImage{
-						URL: fmt.Sprintf("%simg/modicon?id=%s", config.LoadedConfig["URL"], mod.ID),
+						URL:    fmt.Sprintf("%simg/modicon?id=%s", config.LoadedConfig["URL"], mod.ID),
+						Width:  64,
+						Height: 64,
 					},
 					Fields: []*discordgo.MessageEmbedField{
 						{

@@ -16,6 +16,8 @@ import (
 	"github.com/google/uuid"
 )
 
+var DiscordOnUserRegister func()
+
 var Database *sql.DB
 
 func GetMod(modid string) (structs.Mod, error) {
@@ -114,6 +116,7 @@ func DeleteUser(userid string) error {
 func CreateUser() (string, error) {
 	id := security.GenerateID()
 	_, err := Database.Exec("INSERT INTO users (id) VALUES ($1)", id)
+	DiscordOnUserRegister()
 	return id, err
 }
 

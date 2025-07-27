@@ -21,6 +21,8 @@ import (
 	"time"
 )
 
+var DiscordOnModAction func(int, structs.Mod)
+
 const (
 	modVerifyPath        = "tmp/mod/"
 	staticModIconPath    = "static/modimg/"
@@ -33,8 +35,20 @@ const (
 )
 
 func HandleModRepository(tunnelid string, mode int, mod string, author string) {
-	if mode == DownloadAndCreate {
+	switch mode { // same checks are being conducted in webserver module but always good to have security implemented in the actual function
+	case DownloadAndCreate:
 		mod = security.GenerateID()
+	case UpdateAndPackage:
+		modData, err := database.GetMod(mod)
+		if err != nil {
+			println("user ", author, " tried to update mod ", mod, " which does not exist.")
+			return
+		}
+
+		if modData.Author != author {
+			println("user ", author, " tried to update mod ", mod, " which they do not own.")
+			return
+		}
 	}
 
 	filereceived := false
@@ -141,17 +155,25 @@ func HandleModRepository(tunnelid string, mode int, mod string, author string) {
 	}
 	println("finished handling mod repo")
 
-	if mode == UpdateAndPackage {
+	modData, err := database.GetMod(mod)
+	if err != nil {
+		return
+	}
+
+	switch mode {
+	case UpdateAndPackage:
 		err := message.SendMessage("0", author, fmt.Sprintf("(mod)[%s] has finished updating!", mod))
 		if err != nil {
 			return
 		}
-	}
-	if mode == DownloadAndCreate {
+		DiscordOnModAction(1, modData)
+
+	case DownloadAndCreate:
 		err := message.SendMessage("0", author, fmt.Sprintf("(mod)[%s] has been uploaded successfully!", mod))
 		if err != nil {
 			return
 		}
+		DiscordOnModAction(0, modData)
 	}
 }
 
