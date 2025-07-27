@@ -21,7 +21,7 @@ import (
 	"time"
 )
 
-var DiscordOnModAction func(int, structs.Mod)
+var DiscordOnModUpdate func(structs.Mod)
 
 const (
 	modVerifyPath        = "tmp/mod/"
@@ -155,25 +155,22 @@ func HandleModRepository(tunnelid string, mode int, mod string, author string) {
 	}
 	println("finished handling mod repo")
 
-	modData, err := database.GetMod(mod)
-	if err != nil {
-		return
-	}
-
 	switch mode {
-	case UpdateAndPackage:
-		err := message.SendMessage("0", author, fmt.Sprintf("(mod)[%s] has finished updating!", mod))
-		if err != nil {
-			return
-		}
-		DiscordOnModAction(1, modData)
-
 	case DownloadAndCreate:
 		err := message.SendMessage("0", author, fmt.Sprintf("(mod)[%s] has been uploaded successfully!", mod))
 		if err != nil {
 			return
 		}
-		DiscordOnModAction(0, modData)
+	case UpdateAndPackage:
+		modData, err := database.GetMod(mod)
+		if err != nil {
+			return
+		}
+		err = message.SendMessage("0", author, fmt.Sprintf("(mod)[%s] has finished updating!", mod))
+		if err != nil {
+			return
+		}
+		DiscordOnModUpdate(modData)
 	}
 }
 
@@ -250,19 +247,22 @@ func AddMod(modMetadata structs.ModMetadata, publish bool, id string, author str
 		Verified:    false,
 	}
 
-	if config.LoadedConfig["MANUAL_REVIEW_MODS_REQUIRED"] == "off" {
-		mod.Verified = true
-	} else {
-		ticket.AddTicket("Review of "+modMetadata.Name, "modreview", id, "", author)
-		message.SendMessage("0", author, "Your mod has been uploaded successfully, but will have to be manually reviewed before being made public to the mod index for security purposes. Don't worry, this won't take too long!")
-	}
-
 	err := database.CreateMod(mod)
 	if err != nil {
 		return "", err
 	}
 
+	if config.LoadedConfig["MANUAL_REVIEW_MODS_REQUIRED"] == "off" {
+		database.VerifyMod(mod.ID)
+	} else {
+		ticket.AddTicket("Review of "+modMetadata.Name, "modreview", id, "", author)
+		message.SendMessage("0", author, "Your mod has been uploaded successfully, but will have to be manually reviewed before being made public to the mod index for security purposes. Don't worry, this won't take too long!")
+	}
+
 	return id, nil
+}
+
+func OnModVerified() {
 }
 
 func GetModsInBulk(mods []string) ([]structs.Mod, error) {

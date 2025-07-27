@@ -16,7 +16,10 @@ import (
 	"github.com/google/uuid"
 )
 
-var DiscordOnUserRegister func()
+var (
+	DiscordOnModVerify    func(structs.Mod)
+	DiscordOnUserRegister func()
+)
 
 var Database *sql.DB
 
@@ -395,6 +398,16 @@ func DeleteMod(ID string) error {
 
 func VerifyMod(modID string) error {
 	_, err := Database.Exec("UPDATE mods SET verified=TRUE WHERE id=$1 ", modID)
+	if err != nil {
+		return err
+	}
+
+	modData, err := GetMod(modID)
+	if err != nil {
+		return err
+	}
+
+	DiscordOnModVerify(modData)
 	return err
 }
 

@@ -41,9 +41,13 @@ func BeginClient() error {
 		NewMemberMessage()
 	}
 
-	mod.DiscordOnModAction = func(releaseType int, modData structs.Mod) {
+	mod.DiscordOnModUpdate = func(modData structs.Mod) {
+		println("Sending update mod message to discord status channel")
+		NewModMessage(MOD_UPDATED, modData)
+	}
+	database.DiscordOnModVerify = func(modData structs.Mod) {
 		println("Sending new mod message to discord status channel")
-		NewModMessage(releaseType, modData)
+		NewModMessage(MOD_CREATED, modData)
 	}
 
 	client, err := discordgo.New("Bot " + config.LoadedConfig["DISCORD_TOKEN"])
