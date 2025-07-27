@@ -287,7 +287,7 @@ func QueryMods(modQuery structs.RequestModQuery) ([]string, int, error) {
 	case 0: // Newest
 		order = "GROUP BY id ORDER BY id DESC "
 	case 1: // Oldest
-		order = "GROUP BY id ORDER BY id ASC"
+		order = "GROUP BY id ORDER BY id ASC "
 	case 2: // Most Downloads
 		order = "GROUP BY id ORDER BY downloads DESC "
 	case 3: // Least Downloads
