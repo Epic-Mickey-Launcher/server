@@ -37,10 +37,12 @@ func BeginClient() error {
 	}
 
 	database.DiscordOnUserRegister = func() {
+		println("Sending new registration message to discord status channel")
 		NewMemberMessage()
 	}
 
 	mod.DiscordOnModAction = func(releaseType int, modData structs.Mod) {
+		println("Sending new mod message to discord status channel")
 		NewModMessage(releaseType, modData)
 	}
 
@@ -140,7 +142,10 @@ func NewModMessage(releaseType int, mod structs.Mod) {
 		},
 		Timestamp: string(fmt.Sprintf("%d", time.Now().Unix())),
 	}
-	Client.ChannelMessageSendEmbed(statusChannelID, embed)
+	_, err = Client.ChannelMessageSendEmbed(statusChannelID, embed)
+	if err != nil {
+		println("failed to send new mod message ", err.Error())
+	}
 }
 
 func NewMemberMessage() {
@@ -164,7 +169,10 @@ func NewMemberMessage() {
 		Timestamp: string(fmt.Sprintf("%d", time.Now().Unix())),
 	}
 
-	Client.ChannelMessageSendEmbed(statusChannelID, embed)
+	_, err = Client.ChannelMessageSendEmbed(statusChannelID, embed)
+	if err != nil {
+		println("failed to send new registration message ", err.Error())
+	}
 }
 
 func PrintTicket(ticket structs.Ticket) *discordgo.MessageEmbed {
