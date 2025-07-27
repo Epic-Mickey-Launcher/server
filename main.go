@@ -11,11 +11,7 @@ import (
 )
 
 func main() {
-	err := config.LoadConfig("server.cfg")
-	if err != nil {
-		panic(err)
-	}
-
+	config.LoadConfig("server.cfg")
 	security.InitSecurity()
 	database.ConnectDatabase()
 	discord.BeginClient()

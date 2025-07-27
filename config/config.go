@@ -3,10 +3,38 @@ package config
 import (
 	"errors"
 	"os"
+	"os/exec"
 	"strings"
+	"time"
 )
 
-var LoadedConfig map[string]string
+var (
+	configPath   string
+	LoadedConfig map[string]string
+	currentSum   string
+)
+
+func updateRoutine() {
+	dur, _ := time.ParseDuration("10s")
+
+	println("config auto updated initialized")
+
+	for {
+		time.Sleep(dur)
+		sum, err := exec.Command("md5sum", configPath).Output()
+		if err != nil {
+			println("config auto updater has failed " + err.Error())
+			return
+		}
+
+		sumstr := string(sum)
+		if sumstr != currentSum && currentSum != "" {
+			println("config has changed... reloading")
+			loadConfigToMap()
+		}
+		currentSum = sumstr
+	}
+}
 
 func parse(buffer string) (map[string]string, error) {
 	lines := strings.Split(buffer, "\n")
@@ -27,15 +55,22 @@ func parse(buffer string) (map[string]string, error) {
 	return options, nil
 }
 
-func LoadConfig(path string) error {
-	res, err := os.ReadFile(path)
+func loadConfigToMap() {
+	res, err := os.ReadFile(configPath)
 	if err != nil {
-		return err
+		panic(err)
 	}
 
 	config, err := parse(string(res))
+	if err != nil {
+		panic(err)
+	}
 
 	LoadedConfig = config
+}
 
-	return err
+func LoadConfig(path string) {
+	configPath = path
+	loadConfigToMap()
+	go updateRoutine()
 }
