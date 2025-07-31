@@ -622,6 +622,11 @@ func getModArchive(w http.ResponseWriter, r *http.Request) {
 }
 
 func publishMod(w http.ResponseWriter, r *http.Request) {
+	if config.LoadedConfig["ALLOW_MODS"] != "on" {
+		http.Error(w, "sorry. mod uploading is currently disabled.", http.StatusServiceUnavailable)
+		return
+	}
+
 	addr := getIP(r)
 	if addr == "" {
 		http.Error(w, "couldn't retrieve ip address for ratelimit.", http.StatusBadRequest)
@@ -730,15 +735,6 @@ func queryMods(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func getModsByUser(w http.ResponseWriter, r *http.Request) {
-	var data structs.RequestRegisterAccount
-	err := json.NewDecoder(r.Body).Decode(&data)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-}
-
 func getModPageCount(w http.ResponseWriter, r *http.Request) {
 	row := database.Database.QueryRow("SELECT COUNT(*) FROM mods")
 	var count int
@@ -759,7 +755,7 @@ func getModCount(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, "failed to get mod count", http.StatusForbidden)
 	}
-	_, err = w.Write([]byte(strconv.Itoa(count)))
+	_, err = fmt.Fprintf(w, "%d", count)
 	if err != nil {
 		http.Error(w, "failed to write mod count", http.StatusForbidden)
 	}
@@ -829,7 +825,7 @@ func getCommentCount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = w.Write([]byte(fmt.Sprint(count)))
+	_, err = fmt.Fprintf(w, "%d", count)
 }
 
 func expiredRateLimits() {
@@ -947,7 +943,7 @@ func getMessageCount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Write([]byte(fmt.Sprint(count)))
+	fmt.Fprintf(w, "%d", count)
 }
 
 func getMessages(w http.ResponseWriter, r *http.Request) {
@@ -1148,7 +1144,7 @@ func userCount(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, "can't get user count.", http.StatusBadRequest)
 	}
-	_, err = w.Write([]byte(fmt.Sprint(count)))
+	_, err = fmt.Fprintf(w, "%d", count)
 	if err != nil {
 		return
 	}
@@ -1272,7 +1268,6 @@ func AddChunkFromTunnel(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.MultipartForm.Value["tunnelid"] == nil {
-		println(err.Error())
 		http.Error(w, errors.New("no tunnel id provided").Error(), http.StatusForbidden)
 		return
 	}
