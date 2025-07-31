@@ -618,6 +618,7 @@ func getModArchive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	path := fmt.Sprint("static/mods/", query["id"][0], ".tar.gz")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s.tar.gz", query["id"][0]))
 	http.ServeFile(w, r, path)
 }
 
