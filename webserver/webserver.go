@@ -1295,6 +1295,16 @@ func getSecuritySettings(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(settings)
 }
 
+func getFeaturedModImageBanner(w http.ResponseWriter, r *http.Request) {
+	path := config.LoadedConfig["FEATURED_IMG"]
+	http.ServeFile(w, r, path)
+}
+
+func getFeaturedModID(w http.ResponseWriter, r *http.Request) {
+	id := config.LoadedConfig["FEATURED_ID"]
+	w.Write([]byte(id))
+}
+
 func InitializeWebserver() {
 	go expiredOTPRoutine()
 	go expiredRateLimits()
@@ -1358,6 +1368,8 @@ func InitializeWebserver() {
 	mux.HandleFunc("/mod/delete", deleteMod)
 	mux.HandleFunc("/mod/download", getModArchive)
 	mux.HandleFunc("/mod/download/increment", incrementModDownloads)
+	mux.HandleFunc("/mod/featured/img", getFeaturedModImageBanner)
+	mux.HandleFunc("/mod/featured/id", getFeaturedModID)
 
 	// end mod
 
