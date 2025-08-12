@@ -35,19 +35,20 @@ type OTP struct {
 }
 
 type Mod struct {
-	ID           string
-	Author       string
-	Version      int
-	Video        string
-	Game         string
-	Platform     string
-	Downloads    int
-	Published    bool
-	Name         string
-	Description  string
-	Dependencies []string
-	CachedLikes  int
-	Verified     bool
+	ID               string
+	Author           string
+	Version          int
+	Video            string
+	Game             string
+	Platform         string
+	Downloads        int
+	Published        bool
+	Name             string
+	Description      string
+	ShortDescription string
+	Dependencies     []string
+	CachedLikes      int
+	Verified         bool
 }
 
 type TunnelInitData struct {
@@ -188,14 +189,15 @@ type ResponseLiked struct {
 // Misc
 
 type ModMetadata struct {
-	Name         string   `json:"name"`
-	Description  string   `json:"description"`
-	Game         string   `json:"game"`
-	Platform     string   `json:"platform"`
-	IconPath     string   `json:"icon_path"`
-	Video        string   `json:"youtubevideo"`
-	Downloads    int      `json:"downloads"`
-	Dependencies []string `json:"dependencies"`
+	Name             string   `json:"name"`
+	Description      string   `json:"description"`
+	ShortDescription string   `json:"short_description"`
+	Game             string   `json:"game"`
+	Platform         string   `json:"platform"`
+	IconPath         string   `json:"icon_path"`
+	Video            string   `json:"youtubevideo"`
+	Downloads        int      `json:"downloads"`
+	Dependencies     []string `json:"dependencies"`
 }
 
 //

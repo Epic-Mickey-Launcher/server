@@ -26,12 +26,16 @@ var Database *sql.DB
 func GetMod(modid string) (structs.Mod, error) {
 	modResult := structs.Mod{}
 
-	row := Database.QueryRow("SELECT id, name, description, game, platform, youtube, version, author, published, downloads, likes, verified FROM mods WHERE id=$1", modid)
+	row := Database.QueryRow("SELECT id, name, description, game, platform, youtube, version, author, published, downloads, likes, verified, shortdescription FROM mods WHERE id=$1", modid)
 
 	err := row.Scan(&modResult.ID, &modResult.Name, &modResult.Description,
 		&modResult.Game, &modResult.Platform, &modResult.Video,
 		&modResult.Version, &modResult.Author, &modResult.Published,
-		&modResult.Downloads, &modResult.CachedLikes, &modResult.Verified)
+		&modResult.Downloads, &modResult.CachedLikes, &modResult.Verified, &modResult.ShortDescription)
+
+	if modResult.ShortDescription == "clone" { // use the same description as markdown
+		modResult.ShortDescription = modResult.Description
+	}
 
 	return modResult, err
 }
@@ -361,7 +365,7 @@ func CreateMod(mod structs.Mod) error {
 		publish = 0
 	}
 
-	_, err := Database.Exec("INSERT INTO mods (id, name, description, game, platform, youtube, version, author, published, downloads, likes, verified) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)", mod.ID, mod.Name, mod.Description, mod.Game, mod.Platform, mod.Video, 0, mod.Author, publish, 0, 1, mod.Verified)
+	_, err := Database.Exec("INSERT INTO mods (id, name, description, game, platform, youtube, version, author, published, downloads, likes, verified, shortdescription) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)", mod.ID, mod.Name, mod.Description, mod.Game, mod.Platform, mod.Video, 0, mod.Author, publish, 0, 1, mod.Verified, mod.ShortDescription)
 	if err != nil {
 		println(err.Error())
 		return errors.New("failed to create database entry")

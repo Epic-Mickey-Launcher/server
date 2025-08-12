@@ -228,23 +228,24 @@ func UpdateModMeta(modMetadata structs.ModMetadata, ID string) error {
 		return err
 	}
 
-	_, err = database.Database.Exec("UPDATE mods SET name=$1, description=$2, game=$3, platform=$4, youtube=$5, version=$6 WHERE id=$7", modMetadata.Name, modMetadata.Description, modMetadata.Game, strings.ToLower(modMetadata.Platform), modMetadata.Video, version+1, ID)
+	_, err = database.Database.Exec("UPDATE mods SET name=$1, description=$2, game=$3, platform=$4, youtube=$5, version=$6 shortdescription=$7 WHERE id=$8", modMetadata.Name, modMetadata.Description, modMetadata.Game, strings.ToLower(modMetadata.Platform), modMetadata.Video, version+1, modMetadata.ShortDescription, ID)
 	return err
 }
 
 func AddMod(modMetadata structs.ModMetadata, publish bool, id string, author string) (string, error) {
 	mod := structs.Mod{
-		ID:          id,
-		Author:      author,
-		Name:        modMetadata.Name,
-		Description: modMetadata.Description,
-		Platform:    strings.ToLower(modMetadata.Platform),
-		Game:        modMetadata.Game,
-		Video:       modMetadata.Video,
-		Published:   publish,
-		Version:     1,
-		Downloads:   0,
-		Verified:    false,
+		ID:               id,
+		Author:           author,
+		Name:             modMetadata.Name,
+		Description:      modMetadata.Description,
+		ShortDescription: modMetadata.ShortDescription,
+		Platform:         strings.ToLower(modMetadata.Platform),
+		Game:             modMetadata.Game,
+		Video:            modMetadata.Video,
+		Published:        publish,
+		Version:          1,
+		Downloads:        0,
+		Verified:         false,
 	}
 
 	err := database.CreateMod(mod)
