@@ -101,6 +101,10 @@ const (
 )
 
 func NewModMessage(releaseType int, mod structs.Mod) {
+	if config.LoadedConfig["DISCORD_SEND_STATUS_MSG"] == "off" {
+		return
+	}
+
 	var title string
 
 	if releaseType == MOD_CREATED {
@@ -152,6 +156,10 @@ func NewModMessage(releaseType int, mod structs.Mod) {
 }
 
 func NewMemberMessage() {
+	if config.LoadedConfig["DISCORD_SEND_STATUS_MSG"] == "off" {
+		return
+	}
+
 	count, err := database.GetUserCount()
 	if err != nil {
 		return
