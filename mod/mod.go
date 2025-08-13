@@ -139,18 +139,21 @@ func HandleModRepository(tunnelid string, mode int, mod string, author string) {
 			ignoreFilesBuffer = parseIgnore(string(emlIgnore))
 		}
 
+		print("begin packaging")
 		err = archive.Package(path, packagePath, ignoreFilesBuffer)
-		ffmpeg.ResizeImage(path+"/"+metadata.IconPath, 512, 512, "static/modimg/"+mod+".webp")
 		if err != nil {
-			println(errors.New("packaging error"))
+			println("packaging error")
 			return
 		}
-
+		ffmpeg.ResizeImage(path+"/"+metadata.IconPath, 512, 512, "static/modimg/"+mod+".webp")
+		print("packaging finished")
 	}
+
+	print("updating mod meta")
 
 	err = UpdateModMeta(metadata, mod)
 	if err != nil {
-		println(errors.New("failed to update mod meta"))
+		println("failed to update mod meta")
 		return
 	}
 	println("finished handling mod repo")
@@ -228,7 +231,7 @@ func UpdateModMeta(modMetadata structs.ModMetadata, ID string) error {
 		return err
 	}
 
-	_, err = database.Database.Exec("UPDATE mods SET name=$1, description=$2, game=$3, platform=$4, youtube=$5, version=$6 shortdescription=$7 WHERE id=$8", modMetadata.Name, modMetadata.Description, modMetadata.Game, strings.ToLower(modMetadata.Platform), modMetadata.Video, version+1, modMetadata.ShortDescription, ID)
+	_, err = database.Database.Exec("UPDATE mods SET name=$1, description=$2, game=$3, platform=$4, youtube=$5, version=$6, shortdescription=$7 WHERE id=$8", modMetadata.Name, modMetadata.Description, modMetadata.Game, strings.ToLower(modMetadata.Platform), modMetadata.Video, version+1, modMetadata.ShortDescription, ID)
 	return err
 }
 
