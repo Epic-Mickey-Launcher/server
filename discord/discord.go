@@ -119,13 +119,18 @@ func NewModMessage(releaseType int, mod structs.Mod) {
 		return
 	}
 
+	desc := mod.ShortDescription
+	if len(desc) > 200 {
+		desc = desc[:200]
+	}
+
 	embed := &discordgo.MessageEmbed{
 		Color: 0xa434eb,
 		Title: title,
 		Fields: []*discordgo.MessageEmbedField{
 			{
 				Name:  mod.Name,
-				Value: mod.Description,
+				Value: desc,
 			},
 
 			{
