@@ -1303,7 +1303,7 @@ func getFeaturedModImageBanner(w http.ResponseWriter, r *http.Request) {
 
 func getFeaturedModID(w http.ResponseWriter, r *http.Request) {
 	id := config.LoadedConfig["FEATURED_ID"]
-	w.Write([]byte(fmt.Sprintf("%sstr", id))) // cowardly fix for 0.5.4 issue
+	w.Write([]byte(fmt.Sprintf("\"%s\"", id))) // cowardly fix for 0.5.4 issue
 }
 
 func InitializeWebserver() {
