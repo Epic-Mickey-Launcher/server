@@ -795,7 +795,8 @@ func getMod(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	modObj, err := database.GetMod(data.ID)
+	fixed := strings.ReplaceAll(data.ID, "str", "")
+	modObj, err := database.GetMod(fixed) // cowardly fix for 0.5.4
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -1302,7 +1303,7 @@ func getFeaturedModImageBanner(w http.ResponseWriter, r *http.Request) {
 
 func getFeaturedModID(w http.ResponseWriter, r *http.Request) {
 	id := config.LoadedConfig["FEATURED_ID"]
-	w.Write([]byte(id))
+	w.Write([]byte(fmt.Sprintf("%sstr", id))) // cowardly fix for 0.5.4 issue
 }
 
 func InitializeWebserver() {
